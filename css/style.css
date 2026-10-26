@@ -159,6 +159,41 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .curso-entrar { margin-top: auto; padding-top: .8rem; font-weight: 700; color: var(--verde-escuro); }
 .vazio { margin-top: 0; }
 
+/* Ofensiva (estilo Duolingo) */
+.ofensiva-chip { background: rgba(255, 255, 255, .1); padding: .3rem .7rem; border-radius: 99px; color: #fff !important; font-weight: 700; white-space: nowrap; }
+.ofensiva {
+  background: #fff; border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem 1.5rem; margin-bottom: 1.5rem;
+  display: grid; grid-template-columns: auto 1fr; gap: .6rem 2rem; align-items: center;
+}
+.ofensiva-numero { display: flex; align-items: center; gap: .7rem; }
+.ofensiva-fogo { font-size: 2.6rem; line-height: 1; }
+.ofensiva-numero b { display: block; font-family: var(--fonte-titulo); font-size: 2.2rem; line-height: 1; }
+.ofensiva-numero span { font-size: .9rem; color: var(--muted); }
+.ofensiva-semana { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
+.ofensiva-semana .dia {
+  width: 2.6rem; display: grid; justify-items: center; gap: .15rem; font-family: var(--fonte-rotulo); font-size: .75rem; color: var(--muted);
+}
+.ofensiva-semana .dia i {
+  width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--cinza); display: grid; place-items: center; font-style: normal; font-size: 1.05rem;
+}
+.ofensiva-semana .dia.feito i { background: #fff1d6; box-shadow: inset 0 0 0 2px #f5a524; }
+.ofensiva-semana .dia.hoje { color: var(--texto); font-weight: 700; }
+.ofensiva-semana .dia.hoje:not(.feito) i { box-shadow: inset 0 0 0 2px var(--verde); }
+.ofensiva-meta { grid-column: 1 / -1; margin: 0; font-size: .95rem; }
+
+/* Ranking */
+.podio { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: .8rem; align-items: end; margin: 1.2rem 0; }
+.podio-lugar { background: #fff; border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.2rem .8rem; display: grid; justify-items: center; gap: .2rem; text-align: center; }
+.podio-lugar.lugar-1 { order: 2; padding-top: 1.8rem; padding-bottom: 1.8rem; border-top: 4px solid #f5c518; }
+.podio-lugar.lugar-2 { order: 1; border-top: 4px solid #b8bec4; }
+.podio-lugar.lugar-3 { order: 3; border-top: 4px solid #cd7f32; }
+.podio-lugar.voce { outline: 2px solid var(--verde); }
+.medalha { font-size: 2rem; }
+.podio-nota { font-family: var(--fonte-titulo); font-size: 1.8rem; font-weight: 700; }
+.tabela tr.voce td { background: var(--verde-claro); }
+.tabela-rolagem.sem-sombra { box-shadow: none; padding: 0; }
+.menu a { white-space: nowrap; }
+
 /* Cards das aulas */
 .grade-aulas { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
 .aula-card { background: #fff; border-radius: var(--raio); padding: 1.4rem; box-shadow: var(--sombra); display: flex; flex-direction: column; }
@@ -305,6 +340,14 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .menu a { white-space: nowrap; }
   .guia-botoes { grid-template-columns: 1fr; }
   .grade-cursos { grid-template-columns: 1fr; }
+  .ofensiva { grid-template-columns: 1fr; padding: 1rem; }
+  .ofensiva-semana { justify-content: space-between; gap: .2rem; }
+  .ofensiva-semana .dia { width: auto; }
+  .ofensiva-semana .dia i { width: 2rem; height: 2rem; }
+  .podio { gap: .4rem; }
+  .podio-lugar { padding: .9rem .4rem; }
+  .podio-nota { font-size: 1.4rem; }
+  .hero-stats { flex-wrap: wrap; }
   .curso-capa { height: 130px; }
   .revisao { scroll-margin-top: 130px; }
   .guia-bloco { padding: 1.2rem; }
