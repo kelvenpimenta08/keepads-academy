@@ -23,6 +23,10 @@ Aprovado na aula com nota **70 ou mais**, tendo feito as duas provas. O certific
 
 **Liberação das provas:** as duas provas de uma aula só abrem depois de uma semana de flashcards: todos os cards vistos, 7 dias desde a primeira revisão e revisões em pelo menos 4 dias diferentes. As regras ficam em `liberarProva`, no `content/curso.js`. O administrador consegue liberar só para si, para testar.
 
+**Uma tentativa por prova:** depois de enviar, a pessoa só refaz a prova 30 dias depois, e vale a melhor nota. O banco garante essa regra com o trigger `academy_quiz_refazer`.
+
+**Ofensiva e ranking:** a ofensiva conta os dias seguidos com pelo menos 5 flashcards revisados (`ACADEMY_REGRAS.metaDiaria`, no `content/curso.js`). Cada mentoria tem um ranking pela média das provas, calculado pela função `academy_ranking` no Supabase.
+
 **Versão das provas:** `versaoProvas` no `content/curso.js`. Se as perguntas forem trocadas, aumente esse número: as tentativas antigas deixam de contar na nota.
 
 Os flashcards não entram na nota: são a ferramenta de memorização. Depois de ver a resposta, a pessoa marca Errei, Difícil, Bom ou Fácil, e o card volta em 10 minutos, 1 dia, 3 dias, ~1 semana, ~3 semanas, e assim por diante.
