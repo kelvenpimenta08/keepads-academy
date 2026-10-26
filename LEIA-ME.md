@@ -1,5 +1,11 @@
 # Keepads Academy
 
+**No ar em:** https://kelvenpimenta08.github.io/keepads-academy/
+**Código:** github.com/kelvenpimenta08/keepads-academy (público)
+**Banco:** Supabase, projeto `keepads-academy` (conta keepadsperformance@gmail.com), separado dos outros sistemas da agência.
+
+> Ao atualizar qualquer arquivo no GitHub, aumente o número `?v=` em todas as linhas do `index.html` (ex.: de `?v=2` para `?v=3`). Assim o navegador da equipe baixa a versão nova na hora.
+
 Sistema de estudo da mentoria: revisão espaçada no estilo Anki, partes práticas com "Executei", prova teórica, prova prática, nota por aula, certificado e painel da equipe.
 
 - **Site:** arquivos estáticos (HTML, CSS, JS), hospedados no GitHub Pages.
