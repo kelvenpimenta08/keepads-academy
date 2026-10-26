@@ -21,6 +21,10 @@ Sistema de estudo da mentoria: revisão espaçada no estilo Anki, partes prátic
 
 Aprovado na aula com nota **70 ou mais**, tendo feito as duas provas. O certificado libera com as 6 aulas aprovadas. Pesos e nota mínima ficam em `content/curso.js`.
 
+**Liberação das provas:** as duas provas de uma aula só abrem depois de uma semana de flashcards: todos os cards vistos, 7 dias desde a primeira revisão e revisões em pelo menos 4 dias diferentes. As regras ficam em `liberarProva`, no `content/curso.js`. O administrador consegue liberar só para si, para testar.
+
+**Versão das provas:** `versaoProvas` no `content/curso.js`. Se as perguntas forem trocadas, aumente esse número: as tentativas antigas deixam de contar na nota.
+
 Os flashcards não entram na nota: são a ferramenta de memorização. Depois de ver a resposta, a pessoa marca Errei, Difícil, Bom ou Fácil, e o card volta em 10 minutos, 1 dia, 3 dias, ~1 semana, ~3 semanas, e assim por diante.
 
 ---
