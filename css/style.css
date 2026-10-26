@@ -135,6 +135,30 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .hero-stats b { display: block; font-size: 1.7rem; color: #fff; }
 .hero-stats span { font-size: .75rem; color: rgba(255, 255, 255, .6); }
 
+/* Escolha da mentoria / curso */
+.hero-cursos h1 { max-width: 40rem; }
+.grade-cursos { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.2rem; }
+.curso-card {
+  display: flex; flex-direction: column; background: #fff; border-radius: 18px; overflow: hidden;
+  box-shadow: var(--sombra); text-decoration: none; color: inherit; transition: transform .15s, box-shadow .15s;
+}
+.curso-card:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(13, 13, 13, .08), 0 12px 28px rgba(13, 13, 13, .12); }
+.curso-capa { height: 170px; background: var(--preto) center / cover no-repeat; position: relative; }
+.curso-capa-padrao {
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 78% 22%, rgba(0, 202, 158, .55), transparent 55%), var(--preto);
+}
+.curso-iniciais { font-family: var(--fonte-titulo); font-weight: 800; font-size: 4rem; color: var(--verde); letter-spacing: -.02em; }
+.curso-capa-tipo { position: absolute; left: 1rem; bottom: .8rem; font-family: var(--fonte-rotulo); font-size: .78rem; color: rgba(255, 255, 255, .75); text-transform: lowercase; }
+.curso-info { padding: 1.3rem 1.4rem 1.4rem; display: flex; flex-direction: column; gap: .35rem; flex: 1; }
+.curso-topo { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.curso-mentor { font-family: var(--fonte-rotulo); font-size: .82rem; color: var(--verde-escuro); }
+.curso-info h2 { margin: 0; }
+.curso-info p { margin: 0; }
+.curso-linha { font-size: .92rem; margin-top: .3rem !important; }
+.curso-entrar { margin-top: auto; padding-top: .8rem; font-weight: 700; color: var(--verde-escuro); }
+.vazio { margin-top: 0; }
+
 /* Cards das aulas */
 .grade-aulas { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
 .aula-card { background: #fff; border-radius: var(--raio); padding: 1.4rem; box-shadow: var(--sombra); display: flex; flex-direction: column; }
@@ -280,6 +304,8 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .menu::-webkit-scrollbar { display: none; }
   .menu a { white-space: nowrap; }
   .guia-botoes { grid-template-columns: 1fr; }
+  .grade-cursos { grid-template-columns: 1fr; }
+  .curso-capa { height: 130px; }
   .revisao { scroll-margin-top: 130px; }
   .guia-bloco { padding: 1.2rem; }
   h1 { font-size: 1.4rem; }
