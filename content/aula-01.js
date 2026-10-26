@@ -1,8 +1,10 @@
-// Conteúdo da Aula 01, extraído da transcrição completa da aula.
+// Mentoria Adriano Gianini (Agentes de IA para Tráfego Pago): conteúdo da Aula 01,
+// extraído da transcrição completa da aula.
 // Os ids (a1-...) não podem mudar depois que a equipe começar a estudar,
 // porque o progresso de cada card fica salvo pelo id.
 window.AULAS = window.AULAS || {};
-window.AULAS[1] = {
+window.AULAS["adriano-ia-trafego"] = window.AULAS["adriano-ia-trafego"] || {};
+window.AULAS["adriano-ia-trafego"][1] = {
   numero: 1,
   titulo: "Contexto, cérebros e APIs",
   resumo: "Nivelamento: a mentalidade de testar a IA até o limite, o CTR, falar em vez de digitar, transformar tudo o que já foi gravado em contexto, construir cérebros (YouTube e arquivos locais) e conectar ferramentas por API.",
