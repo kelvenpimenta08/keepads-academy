@@ -5,6 +5,8 @@
   const CURSOS = window.CURSOS || [];
   const TODAS_AULAS = window.AULAS || {};
   const SRS = window.SRS;
+  const REGRAS = window.ACADEMY_REGRAS || { metaDiaria: 5, refazerProvaDias: 30 };
+  const DIA = 86400000;
 
   // Curso (mentoria) aberto no momento e as aulas dele
   let CURSO = null;
@@ -186,6 +188,44 @@
   // Endereço dentro do curso aberto, ex.: rota("aula/1/revisao") -> "#/c/adriano-ia-trafego/aula/1/revisao"
   function rota(caminho) { return "#/c/" + CURSO.id + (caminho ? "/" + caminho : ""); }
 
+  // ---------- ofensiva (estilo Duolingo) ----------
+  // Um dia conta quando a pessoa revisa pelo menos REGRAS.metaDiaria flashcards, de qualquer aula ou curso.
+  function calcularOfensiva() {
+    const porDia = {};
+    ((S.bruto && S.bruto.log) || []).forEach(function (l) {
+      const d = diaLocal(l.reviewed_at);
+      porDia[d] = (porDia[d] || 0) + 1;
+    });
+    const meta = REGRAS.metaDiaria;
+    const bateu = function (data) { return (porDia[diaLocal(data)] || 0) >= meta; };
+    const hoje = porDia[diaLocal(new Date())] || 0;
+    // A sequência vale até ontem: se hoje ainda não bateu a meta, ela não está perdida
+    let cursor = new Date(hoje >= meta ? Date.now() : Date.now() - DIA);
+    let dias = 0;
+    while (bateu(cursor)) { dias++; cursor = new Date(cursor.getTime() - DIA); }
+    const semana = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(Date.now() - i * DIA);
+      semana.push({ data: d, feito: bateu(d), hoje: i === 0 });
+    }
+    return { dias: dias, hoje: hoje, meta: meta, batidaHoje: hoje >= meta, semana: semana };
+  }
+
+  function blocoOfensiva() {
+    const o = calcularOfensiva();
+    const letras = ["D", "S", "T", "Q", "Q", "S", "S"];
+    const bolinhas = o.semana.map(function (d) {
+      return '<span class="dia' + (d.feito ? " feito" : "") + (d.hoje ? " hoje" : "") + '"><i>' + (d.feito ? "🔥" : "") + "</i>" + letras[d.data.getDay()] + "</span>";
+    }).join("");
+    return '<section class="ofensiva">' +
+      '<div class="ofensiva-numero"><span class="ofensiva-fogo">🔥</span><div><b>' + o.dias + "</b><span>" + (o.dias === 1 ? "dia" : "dias") + " de ofensiva</span></div></div>" +
+      '<div class="ofensiva-semana">' + bolinhas + "</div>" +
+      '<p class="ofensiva-meta">' + (o.batidaHoje
+        ? "Meta de hoje batida: <b>" + o.hoje + " flashcards</b> revisados. Volte amanhã para manter a ofensiva."
+        : "Hoje: <b>" + o.hoje + " de " + o.meta + "</b> flashcards. Revise " + (o.meta - o.hoje) + " para " + (o.dias ? "manter" : "começar") + " a sua ofensiva.") +
+      "</p></section>";
+  }
+
   function aulasDisponiveis(c) {
     return c.aulas.filter(function (a) { return a.disponivel && (TODAS_AULAS[c.id] || {})[a.numero]; });
   }
@@ -253,10 +293,12 @@
       '<a href="#/">Mentorias</a>' +
       (S.noCurso
         ? '<a href="' + rota("") + '">Aulas</a>' +
+          '<a href="' + rota("ranking") + '">Ranking</a>' +
           '<a href="' + rota("certificado") + '">Certificado</a>' +
           (S.perfil && S.perfil.is_admin ? '<a href="' + rota("equipe") + '">Equipe</a>' : "")
         : "") +
       '<a href="#/como-funciona">Como funciona</a>' +
+      (S.bruto ? '<a href="#/" class="ofensiva-chip" title="Ofensiva: dias seguidos estudando">🔥 ' + calcularOfensiva().dias + "</a>" : "") +
       '<a href="#/perfil" class="menu-perfil">' + esc(nome.split(" ")[0]) + "</a>" +
       "</nav></div></header>" +
       '<main class="conteudo">' + conteudo + "</main>";
@@ -418,6 +460,7 @@
       '<p class="hero-kicker">keep ads academy</p>' +
       "<h1>Olá" + (primeiroNome ? ", " + esc(primeiroNome) : "") + "! Qual mentoria você vai estudar hoje?</h1>" +
       "<p>Escolha a mentoria ou o curso para ver as aulas, revisar os flashcards, executar as práticas e fazer as provas.</p></div></section>" +
+      blocoOfensiva() +
       '<section class="grade-cursos">' + cards + "</section>"
     );
   }
@@ -471,6 +514,7 @@
         : (primeiroNome ? esc(primeiroNome) + ", v" : "V") + (paraHoje ? "ocê tem <b>" + paraHoje + " flashcards</b> para revisar hoje." : "ocê não tem flashcards pendentes hoje. Bom trabalho!")) +
       "</p></div>" +
       '<div class="hero-stats"><div><b>' + aprovadas + "/" + CURSO.aulas.length + "</b><span>aulas aprovadas</span></div>" +
+      "<div><b>🔥 " + calcularOfensiva().dias + "</b><span>dias de ofensiva</span></div>" +
       "<div><b>" + CURSO.notaMinima + "</b><span>nota mínima</span></div></div></section>" +
       (semAulas
         ? '<section class="painel centro vazio"><h2>Conteúdo em preparação</h2><p class="muted">' + esc(CURSO.descricao) +
@@ -584,7 +628,7 @@
       (pendentes
         ? '<button class="btn btn-primario btn-largo" id="rv-iniciar">Começar revisão (' + pendentes + " cards)</button>"
         : '<p class="centro">Tudo em dia! ' + (prox ? "Próxima revisão em <b>" + dataBR(prox) + "</b>." : "") + "</p>") +
-      '<button class="btn btn-secundario btn-largo" id="rv-livre">Revisão livre: todos os ' + r.totalCards + " cards, sem mexer na agenda</button>" +
+      '<button class="btn btn-secundario btn-largo" id="rv-livre">Revisão livre: todos os ' + r.totalCards + " cards, sem mexer na agenda (conta para a ofensiva)</button>" +
       '<p class="muted pequeno">Depois de ver a resposta, você se dá uma nota de 1 a 4 (Errei, Difícil, Bom, Fácil). Errou, o card volta em 10 minutos. Acertou, ele some e reaparece cada vez mais espaçado. É o mesmo princípio do Anki. <a href="#/como-funciona">Veja o guia completo</a>.</p>' +
       "</div>";
   }
@@ -617,8 +661,15 @@
       rv.salvando = false;
       if (r1.error) { toast("Não consegui salvar: " + traduzErro(r1.error), "erro"); return; }
       S.dados.cards[id] = linha;
-      sb.from(T.log).insert({ user_id: S.session.user.id, curso: CURSO.id, card_id: id, aula: n, nota: nota }).then(function () {});
-      S.dados.log.push({ curso: CURSO.id, aula: n, reviewed_at: new Date().toISOString() });
+    }
+    // Toda revisão conta para a ofensiva, inclusive a revisão livre (que não mexe na agenda do card)
+    const antes = calcularOfensiva();
+    sb.from(T.log).insert({ user_id: S.session.user.id, curso: CURSO.id, card_id: id, aula: n, nota: nota }).then(function () {});
+    const registro = { curso: CURSO.id, aula: n, reviewed_at: new Date().toISOString() };
+    S.dados.log.push(registro);
+    S.bruto.log.push(registro);
+    if (!antes.batidaHoje && calcularOfensiva().batidaHoje) {
+      toast("🔥 Meta do dia batida! Ofensiva de " + calcularOfensiva().dias + (calcularOfensiva().dias === 1 ? " dia." : " dias."));
     }
     rv.fila.shift();
     if (nota === 1) rv.fila.push(id); // errou: volta no fim da fila desta sessão
@@ -698,6 +749,20 @@
 
   function corpoProva(n, tipo, r) {
     const nomeProva = tipo === "teorica" ? "Prova teórica" : "Prova prática";
+    // Uma tentativa a cada REGRAS.refazerProvaDias dias (o banco também bloqueia)
+    const tentativas = S.dados.provas.filter(function (x) { return x.aula === n && x.tipo === tipo; });
+    const ultima = tentativas[0];
+    const proximaTentativa = ultima ? new Date(new Date(ultima.created_at).getTime() + REGRAS.refazerProvaDias * DIA) : null;
+    if (ultima && proximaTentativa > new Date() && !S.prova) {
+      const melhorNota = tipo === "teorica" ? r.teorica : r.pratica;
+      return '<div class="painel centro"><h2>' + nomeProva + " feita</h2>" +
+        '<div class="resultado ' + (melhorNota >= CURSO.notaMinima ? "ok" : "baixo") + '"><b>' + Math.round(melhorNota) + "</b><span>sua nota</span></div>" +
+        "<p>Você fez esta prova em <b>" + dataBR(ultima.created_at) + "</b> (" + ultima.acertos + " de " + ultima.total + " acertos). " +
+        "A próxima tentativa libera em <b>" + dataBR(proximaTentativa) + "</b>, e aí vale a melhor nota.</p>" +
+        '<p class="muted">Até lá, continue revisando os flashcards todo dia: é o que vai subir a sua nota.</p>' +
+        '<div class="linha-botoes"><a class="btn btn-primario" href="' + rota("aula/" + n) + '/revisao">Revisar flashcards</a>' +
+        '<a class="btn btn-secundario" href="' + rota("ranking") + '">Ver ranking</a></div></div>';
+    }
     const lib = liberacaoProva(n, S.dados, r);
     const liberadaAdmin = S.provaAdmin === n && S.perfil && S.perfil.is_admin;
     if (!lib.ok && !liberadaAdmin && !S.prova) {
@@ -734,7 +799,8 @@
         p.resultado.acertos + " de " + p.resultado.total + " acertos</span><p>" +
         (ok ? "Mandou bem! Revise as que errou abaixo." : "Ainda abaixo de " + CURSO.notaMinima + ". Revise as explicações e os flashcards e tente de novo.") + "</p></div>" +
         '<ol class="correcao">' + lista + "</ol>" +
-        '<div class="linha-botoes"><button class="btn btn-primario" id="pv-iniciar">Fazer de novo</button><a class="btn btn-secundario" href="' + rota("aula/" + n) + '/nota">Ver nota da aula</a></div></div>';
+        '<p class="muted centro">Próxima tentativa desta prova a partir de <b>' + dataBR(new Date(Date.now() + REGRAS.refazerProvaDias * DIA)) + "</b>.</p>" +
+        '<div class="linha-botoes"><a class="btn btn-primario" href="' + rota("ranking") + '">Ver ranking</a><a class="btn btn-secundario" href="' + rota("aula/" + n) + '/nota">Ver nota da aula</a></div></div>';
     }
     if (p) {
       const respondidas = Object.keys(p.respostas).length;
@@ -749,15 +815,15 @@
         '<div class="rodape-prova"><span id="pv-contagem">' + respondidas + " de " + p.questoes.length + ' respondidas</span>' +
         '<button class="btn btn-primario" id="pv-enviar"' + (respondidas < p.questoes.length ? " disabled" : "") + ">Enviar respostas</button></div></div>";
     }
-    const tentativas = S.dados.provas.filter(function (x) { return x.aula === n && x.tipo === tipo; });
     const melhor = tipo === "teorica" ? r.teorica : r.pratica;
     const total = questoesDa(n, tipo).length;
     return '<div class="painel centro"><h2>' + nomeProva + "</h2>" +
-      "<p>" + total + " questões de múltipla escolha" + (tipo === "pratica" ? " sobre a execução das partes práticas" : " sobre os conceitos da aula") + ". A ordem muda a cada tentativa e vale a sua melhor nota.</p>" +
+      "<p>" + total + " questões difíceis de múltipla escolha" + (tipo === "pratica" ? " sobre a execução das partes práticas" : " sobre os conceitos da aula") + ".</p>" +
+      '<p class="aviso"><b>Você tem uma tentativa.</b> Depois de enviar, só dá para refazer ' + REGRAS.refazerProvaDias + " dias depois. A nota entra no ranking da mentoria.</p>" +
       (tentativas.length
-        ? '<p class="muted">Melhor nota: <b>' + Math.round(melhor) + "</b> · Tentativas: " + tentativas.length + " · Última: " + dataBR(tentativas[0].created_at) + "</p>"
-        : '<p class="muted">Você ainda não fez esta prova.</p>') +
-      '<button class="btn btn-primario" id="pv-iniciar">' + (tentativas.length ? "Fazer de novo" : "Começar prova") + "</button></div>";
+        ? '<p class="muted">Melhor nota até agora: <b>' + Math.round(melhor) + "</b> · Tentativas: " + tentativas.length + "</p>"
+        : "") +
+      '<button class="btn btn-primario" id="pv-iniciar">Começar prova</button></div>';
   }
 
   function iniciarProva(n, tipo) {
@@ -892,7 +958,14 @@
       "<li>já se passaram <b>" + R.diasDesdeInicio + " dias</b> desde a sua primeira revisão daquela aula;</li>" +
       "<li>você revisou em pelo menos <b>" + R.diasDeRevisao + " dias diferentes</b>;</li>" +
       "<li>para a prova prática, você também marcou todas as partes práticas.</li></ul>" +
-      "<p>A ordem das perguntas e das alternativas muda a cada tentativa, e vale a sua <b>melhor nota</b>. Depois de enviar, você vê a explicação de cada questão.</p></section>" +
+      "<p><b>Cada prova tem uma tentativa.</b> Depois de enviar, você vê a explicação de cada questão, e só pode refazer a prova " + REGRAS.refazerProvaDias + " dias depois. Se refizer, vale a <b>melhor nota</b>.</p></section>" +
+
+      '<section class="guia-bloco"><h2>🔥 Ofensiva</h2>' +
+      "<p>Igual ao Duolingo: a ofensiva conta quantos <b>dias seguidos</b> você estudou. Um dia vale quando você revisa pelo menos <b>" + REGRAS.metaDiaria + " flashcards</b>, de qualquer aula ou mentoria. A revisão livre também conta.</p>" +
+      "<p>Se você não bateu a meta hoje, a ofensiva ainda não está perdida: ela só zera se você passar um dia inteiro sem estudar. Cinco minutos por dia já mantêm a sequência.</p></section>" +
+
+      '<section class="guia-bloco"><h2>🏆 Ranking</h2>' +
+      "<p>Cada mentoria tem o seu ranking, só com as pessoas daquela mentoria. A posição é definida pela <b>média das provas</b> (a melhor nota de cada prova). Em caso de empate, ganha quem fez mais provas e depois quem tem a maior ofensiva. Também tem um ranking separado só das maiores ofensivas.</p></section>" +
 
       '<section class="guia-bloco"><h2>4. Nota e certificado</h2>' +
       '<table class="tabela"><thead><tr><th>Componente</th><th>Peso</th></tr></thead><tbody>' +
@@ -957,6 +1030,61 @@
       '<ul class="lista-cert">' + itens + "</ul>" +
       (S.perfil && S.perfil.is_admin && CURSO.aulas.length ? '<a class="btn btn-secundario" href="' + rota("certificado/modelo") + '">Ver modelo do certificado</a>' : "") +
       "</div>"
+    );
+  }
+
+  // ---------- ranking da mentoria ----------
+
+  async function telaRanking() {
+    layout('<div class="painel centro"><p>Carregando o ranking…</p></div>');
+    const r = await sb.rpc("academy_ranking", { p_curso: CURSO.id, p_versao: CURSO.versaoProvas, p_meta: REGRAS.metaDiaria });
+    if (r.error) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(r.error)) + "</p></div>"); return; }
+    const eu = S.session.user.id;
+    const totalProvas = aulasDisponiveis(CURSO).length * 2;
+    const pessoas = (r.data || []).map(function (p) {
+      return { id: p.user_id, nome: p.nome || "(sem nome)", provas: p.provas_feitas, media: p.media === null ? null : Number(p.media), ofensiva: p.ofensiva };
+    });
+
+    // Ranking de notas: média das melhores notas de cada prova; empate desempata por provas feitas e ofensiva
+    const porNota = pessoas.filter(function (p) { return p.media !== null; }).sort(function (a, b) {
+      return b.media - a.media || b.provas - a.provas || b.ofensiva - a.ofensiva;
+    });
+    const semProva = pessoas.filter(function (p) { return p.media === null; });
+    const porOfensiva = pessoas.slice().sort(function (a, b) { return b.ofensiva - a.ofensiva; }).filter(function (p) { return p.ofensiva > 0; }).slice(0, 10);
+
+    const medalhas = ["🥇", "🥈", "🥉"];
+    const podio = porNota.slice(0, 3).map(function (p, i) {
+      return '<div class="podio-lugar lugar-' + (i + 1) + (p.id === eu ? " voce" : "") + '"><span class="medalha">' + medalhas[i] + "</span>" +
+        "<b>" + esc(p.nome.split(" ")[0]) + "</b><span class=\"podio-nota\">" + p.media.toFixed(1).replace(".", ",") + "</span>" +
+        '<span class="muted pequeno">🔥 ' + p.ofensiva + "</span></div>";
+    }).join("");
+
+    const linhaNota = function (p, i) {
+      return '<tr class="' + (p.id === eu ? "voce" : "") + '"><td><b>' + (i + 1) + "º</b></td><td>" + esc(p.nome) + (p.id === eu ? ' <span class="chip chip-ok">você</span>' : "") + "</td>" +
+        "<td><b>" + p.media.toFixed(1).replace(".", ",") + "</b></td><td>" + p.provas + "/" + totalProvas + "</td><td>🔥 " + p.ofensiva + "</td></tr>";
+    };
+    const linhaOfensiva = function (p, i) {
+      return '<tr class="' + (p.id === eu ? "voce" : "") + '"><td><b>' + (i + 1) + "º</b></td><td>" + esc(p.nome) + "</td><td><b>🔥 " + p.ofensiva + "</b> " + (p.ofensiva === 1 ? "dia" : "dias") + "</td></tr>";
+    };
+
+    layout(
+      '<a href="' + rota("") + '" class="voltar">← Voltar para as aulas</a>' +
+      '<p class="hero-kicker">ranking</p><h1>' + esc(CURSO.tipo + " " + CURSO.titulo) + "</h1>" +
+      '<p class="muted">Só entram aqui as pessoas desta mentoria. A nota é a média das provas feitas, considerando a melhor tentativa de cada prova.</p>' +
+      (porNota.length ? '<section class="podio">' + podio + "</section>" : "") +
+      '<section class="painel"><h2>Ranking das provas</h2>' +
+      (porNota.length
+        ? '<div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr><th>#</th><th>Pessoa</th><th>Média</th><th>Provas</th><th>Ofensiva</th></tr></thead><tbody>' +
+          porNota.map(linhaNota).join("") + "</tbody></table></div>"
+        : '<p class="muted">Ninguém fez prova ainda. As provas liberam depois de uma semana de flashcards.</p>') +
+      (semProva.length ? '<p class="muted pequeno">Ainda sem prova: ' + semProva.map(function (p) { return esc(p.nome); }).join(", ") + ".</p>" : "") +
+      "</section>" +
+      '<section class="painel"><h2>🔥 Maiores ofensivas</h2>' +
+      (porOfensiva.length
+        ? '<div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr><th>#</th><th>Pessoa</th><th>Ofensiva</th></tr></thead><tbody>' +
+          porOfensiva.map(linhaOfensiva).join("") + "</tbody></table></div>"
+        : '<p class="muted">Ninguém está com ofensiva ativa agora. Revise ' + REGRAS.metaDiaria + " flashcards hoje e seja o primeiro.</p>") +
+      '<p class="muted pequeno">Ofensiva = dias seguidos revisando pelo menos ' + REGRAS.metaDiaria + " flashcards, em qualquer mentoria.</p></section>"
     );
   }
 
@@ -1053,6 +1181,7 @@
           case "aula": return telaAula(Number(partes[3]), partes[4] || "revisao");
           case "certificado": return telaCertificado(partes[3] === "modelo");
           case "equipe": return telaEquipe();
+          case "ranking": return telaRanking();
           default: location.hash = rota("");
         }
         return;
