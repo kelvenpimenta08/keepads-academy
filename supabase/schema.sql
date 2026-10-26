@@ -134,5 +134,11 @@ revoke delete on public.academy_card_states, public.academy_review_log,
   public.academy_practice_checks, public.academy_quiz_attempts from authenticated;
 revoke execute on function public.academy_is_admin() from anon;
 
+-- Vários cursos: cada registro guarda de qual curso/mentoria ele é
+alter table public.academy_card_states add column if not exists curso text not null default 'adriano-ia-trafego';
+alter table public.academy_review_log add column if not exists curso text not null default 'adriano-ia-trafego';
+alter table public.academy_practice_checks add column if not exists curso text not null default 'adriano-ia-trafego';
+alter table public.academy_quiz_attempts add column if not exists curso text not null default 'adriano-ia-trafego';
+
 -- A primeira pessoa que entrar no Academy vira administradora. Para promover outra depois:
 -- update public.academy_profiles set is_admin = true where email = 'email-da-pessoa@exemplo.com';
