@@ -62,21 +62,29 @@ A **primeira conta criada** no site vira administradora automaticamente. Por iss
 
 Para promover outra pessoa a administradora depois, rode no **SQL Editor** do Supabase:
 ```sql
-update public.profiles set is_admin = true where email = 'email-da-pessoa@exemplo.com';
+update public.academy_profiles set is_admin = true where email = 'email-da-pessoa@exemplo.com';
 ```
 
 ---
 
-## Como adicionar as próximas aulas
+## Vários cursos e mentorias
 
-1. Copie `content/aula-01.js` para `content/aula-02.js` e troque:
-   - `window.AULAS[1]` por `window.AULAS[2]` e `numero: 1` por `numero: 2`;
-   - todos os ids `a1-...` por `a2-...` (**nunca reaproveite ids**: o progresso é salvo por id);
-   - o conteúdo (flashcards, prova teórica e partes práticas com as perguntas).
-   Dica: peça ao Claude: *"Leia a transcrição da Aula 02 e gere o content/aula-02.js no mesmo formato da aula-01.js."*
-2. Em `index.html`, tire o comentário da linha `<script src="content/aula-02.js"></script>`.
-3. Em `content/curso.js`, troque o título da aula 2 e mude `disponivel` para `true`.
-4. Suba os arquivos alterados no GitHub (**Add file → Upload files**, por cima dos antigos).
+Depois do login, a pessoa escolhe a mentoria ou o curso. Cada curso tem as próprias aulas, provas, nota, certificado e painel de equipe. O progresso fica separado por curso no banco (coluna `curso`).
+
+Os cursos ficam em `content/curso.js`, na lista `window.CURSOS`. Hoje são dois:
+- `adriano-ia-trafego`: Mentoria Agentes de IA para Tráfego Pago (Adriano Gianini)
+- `di-santana-growth-commerce`: Mentoria Growth Commerce (Di Santana), ainda sem aulas
+
+**Para criar um curso novo:** copie um bloco da lista, dê um `id` novo (sem espaço nem acento), preencha título, mentor e descrição. Se quiser uma capa, coloque a imagem na pasta `img/` e o caminho em `imagem`. Sem imagem, a capa mostra as iniciais do mentor.
+
+## Como adicionar aulas
+
+1. Crie o arquivo da aula, no mesmo formato de `content/aula-01.js`, registrando em `window.AULAS["id-do-curso"][numero]`.
+   - **Os ids precisam ser únicos entre todos os cursos.** Use um prefixo do curso, por exemplo `a2-...` para a Aula 2 do Adriano e `ds-a1-...` para a Aula 1 da Di Santana. Nunca reaproveite um id: o progresso é salvo por ele.
+   - Dica: peça ao Claude: *"Leia a transcrição da Aula 02 do Adriano e gere o arquivo da aula no mesmo formato da aula-01.js."*
+2. Em `index.html`, acrescente a linha `<script src="content/NOME-DO-ARQUIVO.js?v=..."></script>`.
+3. Em `content/curso.js`, no curso certo, troque o título da aula e mude `disponivel` para `true` (ou acrescente a aula na lista `aulas`).
+4. Suba os arquivos alterados no GitHub (**Add file → Upload files**, por cima dos antigos) e aumente o `?v=` do `index.html`.
 
 Depois que a equipe começar a estudar, evite mudar o texto de um card a ponto de mudar o sentido dele. Correções pequenas não têm problema.
 
@@ -88,8 +96,8 @@ css/style.css       identidade visual Keepads
 js/config.js        URL e chave pública do Supabase
 js/srs.js           algoritmo de revisão espaçada (estilo Anki / SM-2)
 js/app.js           telas, login, provas, nota, certificado, equipe
-content/curso.js    lista das 6 aulas, pesos e nota mínima
-content/aula-01.js  flashcards, prova teórica, partes práticas da Aula 01
+content/curso.js    cursos/mentorias, aulas de cada um, pesos, nota mínima e regras das provas
+content/aula-01.js  Aula 01 da mentoria do Adriano: flashcards, prova teórica e partes práticas
 supabase/schema.sql tabelas e regras de segurança
 ```
 
