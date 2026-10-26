@@ -193,6 +193,28 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .nota-4 { border-bottom: 3px solid #2563eb; }
 .nota-btn:hover { background: var(--fundo); }
 
+.notas-dica { margin: 0; font-size: .92rem; color: var(--muted); text-align: center; }
+.aula-aviso { margin: 0 0 1rem; font-family: var(--fonte-rotulo); font-size: .8rem; color: var(--aviso); }
+.aula-aviso.ok { color: var(--verde-escuro); }
+
+/* Requisitos para liberar a prova */
+.requisitos { list-style: none; padding: 0; margin: 1.2rem auto; max-width: 28rem; display: grid; gap: .6rem; text-align: left; }
+.requisitos li { display: flex; gap: .8rem; align-items: flex-start; border: 1px solid var(--borda); border-radius: 12px; padding: .8rem 1rem; }
+.requisitos li div { display: grid; }
+.requisitos li.feito { background: var(--verde-claro); border-color: #b5ecdc; }
+.req-icone { font-weight: 700; color: var(--muted); width: 1.2rem; }
+.requisitos li.feito .req-icone { color: var(--verde-escuro); }
+
+/* Página "Como funciona" */
+.guia { max-width: 46rem; margin: 0 auto; }
+.guia-lead { font-size: 1.1rem; }
+.guia-bloco { background: #fff; border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.6rem 1.8rem; margin-top: 1.2rem; }
+.guia-bloco h3 { margin-top: 1.2rem; }
+.guia-passos { padding-left: 1.2rem; display: grid; gap: .4rem; }
+.guia-botoes { display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; margin: 1rem 0 .4rem; }
+.guia-botoes .nota-btn { cursor: default; justify-items: start; text-align: left; padding: .8rem 1rem; }
+.guia-botoes .nota-btn span { font-size: .88rem; }
+
 /* Partes práticas */
 .linha-progresso { display: grid; gap: .4rem; }
 .tarefas { list-style: none; padding: 0; margin: 0; display: grid; gap: .7rem; }
@@ -251,6 +273,13 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 
 /* Celular */
 @media (max-width: 760px) {
+  .topo-in { flex-wrap: wrap; row-gap: .4rem; }
+  .menu { width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .menu::-webkit-scrollbar { display: none; }
+  .menu a { white-space: nowrap; }
+  .guia-botoes { grid-template-columns: 1fr; }
+  .revisao { scroll-margin-top: 130px; }
+  .guia-bloco { padding: 1.2rem; }
   h1 { font-size: 1.4rem; }
   .auth { grid-template-columns: 1fr; }
   .auth-hero { padding: 2rem 16px; }
