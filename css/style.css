@@ -1,14 +1,19 @@
-/* Identidade Keepads: Poppins, verde-água sobre fundo claro, hero preto */
+/* Identidade visual Keep Ads (rebranding): verde #00CA9E, preto #0D0D0D, cinza #EEEEEE.
+   Títulos em Baloo 2, textos em Source Sans 3, rótulos em Source Code Pro (como o "performance & estratégia" da logo). */
 :root {
-  --verde: #14b8a6;
-  --verde-escuro: #0f766e;
-  --verde-claro: #e6f7f5;
-  --preto: #0e1412;
-  --fundo: #f4f7f6;
+  --verde: #00ca9e;
+  --verde-escuro: #007f63;   /* verde para texto sobre branco (contraste legível) */
+  --verde-claro: #e3f9f3;
+  --preto: #0d0d0d;
+  --cinza: #eeeeee;
+  --fundo: #f5f5f5;
   --branco: #ffffff;
-  --texto: #13201e;
-  --muted: #5b6b68;
-  --borda: #dde6e4;
+  --texto: #0d0d0d;
+  --muted: #5e6462;
+  --borda: #e2e5e4;
+  --fonte-titulo: "Baloo 2", "Source Sans 3", system-ui, sans-serif;
+  --fonte-texto: "Source Sans 3", system-ui, sans-serif;
+  --fonte-rotulo: "Source Code Pro", ui-monospace, monospace;
   --aviso: #d97706;
   --aviso-claro: #fef3e2;
   --erro: #dc2626;
@@ -21,15 +26,16 @@
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  font-family: "Poppins", system-ui, sans-serif;
+  font-family: var(--fonte-texto);
+  font-size: 17px;
   background: var(--fundo);
   color: var(--texto);
   line-height: 1.55;
 }
-h1, h2, h3 { line-height: 1.25; margin: 0 0 .5rem; }
-h1 { font-size: 1.7rem; }
-h2 { font-size: 1.25rem; }
-h3 { font-size: 1.02rem; }
+h1, h2, h3 { font-family: var(--fonte-titulo); font-weight: 700; line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.01em; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.45rem; }
+h3 { font-size: 1.15rem; }
 a { color: var(--verde-escuro); }
 code { background: var(--verde-claro); padding: 1px 6px; border-radius: 6px; font-size: .9em; }
 kbd { font-family: inherit; font-size: .7rem; border: 1px solid currentColor; border-radius: 5px; padding: 0 5px; opacity: .6; margin-left: 6px; }
@@ -40,24 +46,28 @@ hr { border: 0; border-top: 1px solid var(--borda); margin: 1.5rem 0; }
 .erro { color: var(--erro); font-size: .9rem; margin-top: .5rem; }
 .carregando { padding: 4rem 1rem; text-align: center; color: var(--muted); }
 
-/* Marca */
-.logo { font-weight: 700; font-size: 1.35rem; letter-spacing: -.02em; color: #fff; }
-.logo b { color: var(--verde); font-weight: 700; }
-.logo-sub { font-size: .72rem; text-transform: uppercase; letter-spacing: .18em; color: rgba(255, 255, 255, .6); margin-left: .5rem; }
+/* Marca: PNG oficial (1000x1000 com a logo no centro), recortado para a área da logo */
+.logo-img {
+  display: inline-block; height: 38px; aspect-ratio: 636 / 214;
+  background: no-repeat center / 157.2% auto;
+  vertical-align: middle;
+}
+.logo-sub { font-family: var(--fonte-rotulo); font-size: .78rem; color: var(--verde); margin-left: .6rem; vertical-align: middle; }
 
 /* Botões */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
-  font: 600 .92rem "Poppins", sans-serif; border-radius: 10px; padding: .7rem 1.2rem;
+  font: 600 .92rem var(--fonte-texto); border-radius: 10px; padding: .7rem 1.2rem;
   border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: .15s;
 }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn-primario { background: var(--verde); color: #fff; }
-.btn-primario:hover:not(:disabled) { background: var(--verde-escuro); }
+.btn { font-weight: 700; font-size: 1rem; border-radius: 12px; }
+.btn-primario { background: var(--verde); color: var(--preto); }
+.btn-primario:hover:not(:disabled) { background: #00b48d; }
 .btn-secundario { background: #fff; color: var(--texto); border-color: var(--borda); }
 .btn-secundario:hover { border-color: var(--verde); color: var(--verde-escuro); }
 .btn-largo { width: 100%; }
-.link { background: none; border: 0; color: var(--verde-escuro); font: 500 .9rem "Poppins", sans-serif; cursor: pointer; padding: .5rem; display: block; margin: .4rem auto 0; }
+.link { background: none; border: 0; color: var(--verde-escuro); font: 500 .9rem var(--fonte-texto); cursor: pointer; padding: .5rem; display: block; margin: .4rem auto 0; }
 .linha-botoes { display: flex; gap: .7rem; flex-wrap: wrap; justify-content: center; align-items: center; margin-top: 1rem; }
 
 /* Chips e barras */
@@ -72,30 +82,40 @@ hr { border: 0; border-top: 1px solid var(--borda); margin: 1.5rem 0; }
 label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: .9rem; }
 input[type=text], input[type=email], input[type=password], input:not([type]) {
   display: block; width: 100%; margin-top: .3rem; padding: .7rem .85rem;
-  border: 1px solid var(--borda); border-radius: 10px; font: 400 .95rem "Poppins", sans-serif; background: #fff; color: var(--texto);
+  border: 1px solid var(--borda); border-radius: 10px; font: 400 .95rem var(--fonte-texto); background: #fff; color: var(--texto);
 }
 input:focus { outline: 2px solid var(--verde); outline-offset: 1px; border-color: var(--verde); }
 input:disabled { background: #f1f4f3; color: var(--muted); }
 .aviso { background: var(--verde-claro); color: var(--verde-escuro); border-radius: 10px; padding: .75rem 1rem; font-size: .88rem; margin-bottom: 1rem; }
 
 /* Autenticação */
-.auth { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; }
+.auth { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; background: #fff; }
 .auth-hero { background: var(--preto); color: #fff; padding: 3rem; display: flex; flex-direction: column; justify-content: center; }
 .auth-hero h1 { font-size: 2.1rem; margin-top: 2rem; max-width: 26rem; }
 .auth-hero p { color: rgba(255, 255, 255, .72); max-width: 26rem; }
 .auth-card { background: #fff; padding: 3rem; display: flex; flex-direction: column; justify-content: center; max-width: 30rem; width: 100%; margin: 0 auto; }
 .auth > .auth-card:only-child { grid-column: 1 / -1; margin: 3rem auto; border-radius: var(--raio); box-shadow: var(--sombra); min-height: auto; }
-.auth-card .auth-marca .logo { color: var(--preto); }
-.auth-card .auth-marca .logo-sub { color: var(--muted); }
+.auth-card .auth-marca .logo-sub, .cert-marca .logo-sub { color: var(--verde-escuro); }
+.auth-hero .logo-img { height: 72px; }
+
+/* Rótulos no estilo da assinatura da logo ("performance & estratégia"): monoespaçado e minúsculo */
+.hero-kicker, .aula-num, .fc-rotulo, .tarefa-num, .cert-kicker, .tabela th, .revisao-topo {
+  font-family: var(--fonte-rotulo) !important; text-transform: lowercase !important; letter-spacing: 0 !important; font-weight: 500 !important;
+}
+/* Números grandes na fonte da marca */
+.aula-nota b, .hero-stats b, .stats-revisao b, .resultado b, .aula-cabeca-nota b, .cert-rodape b, .nota-btn b {
+  font-family: var(--fonte-titulo);
+}
 .auth-card .auth-marca { margin-bottom: 1.5rem; }
 .abas-auth { display: flex; background: var(--fundo); border-radius: 12px; padding: 4px; margin-bottom: 1.5rem; }
-.abas-auth button { flex: 1; border: 0; background: none; padding: .6rem; border-radius: 9px; font: 600 .9rem "Poppins", sans-serif; color: var(--muted); cursor: pointer; }
+.abas-auth button { flex: 1; border: 0; background: none; padding: .6rem; border-radius: 9px; font: 600 .9rem var(--fonte-texto); color: var(--muted); cursor: pointer; }
 .abas-auth button.ativo { background: #fff; color: var(--texto); box-shadow: var(--sombra); }
 
 /* Topo */
 .topo { background: var(--preto); position: sticky; top: 0; z-index: 10; }
 .topo-in { max-width: 1100px; margin: 0 auto; padding: .85rem 16px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.marca { text-decoration: none; display: flex; align-items: baseline; }
+.marca { text-decoration: none; display: flex; align-items: center; white-space: nowrap; }
+.topo .logo-img { height: 44px; }
 .menu { display: flex; gap: 1.2rem; align-items: center; }
 .menu a { color: rgba(255, 255, 255, .78); text-decoration: none; font-size: .88rem; font-weight: 500; }
 .menu a:hover { color: #fff; }
@@ -163,7 +183,7 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .fc-divisor { border-top: 1px dashed var(--borda); margin: 1.3rem 0; }
 .fc-dica { color: var(--muted); font-size: .85rem; margin-top: 2rem; }
 .notas { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; }
-.nota-btn { border: 1px solid var(--borda); background: #fff; border-radius: 12px; padding: .8rem .4rem; cursor: pointer; font-family: "Poppins", sans-serif; display: grid; gap: .1rem; justify-items: center; }
+.nota-btn { border: 1px solid var(--borda); background: #fff; border-radius: 12px; padding: .8rem .4rem; cursor: pointer; font-family: var(--fonte-texto); display: grid; gap: .1rem; justify-items: center; }
 .nota-btn b { font-size: .95rem; }
 .nota-btn span { font-size: .75rem; color: var(--muted); }
 .nota-btn kbd { margin: .2rem 0 0; }
@@ -215,8 +235,7 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .lista-cert li { display: flex; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-bottom: 1px solid var(--borda); }
 .certificado { background: #fff; aspect-ratio: 297 / 210; max-width: 960px; margin: 1rem auto; padding: 2.2%; box-shadow: var(--sombra); }
 .cert-borda { height: 100%; border: 2px solid var(--preto); outline: 6px solid var(--verde); outline-offset: -12px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4% 8%; gap: .4rem; }
-.cert-marca .logo { color: var(--preto); font-size: 1.8rem; }
-.cert-marca .logo-sub { color: var(--muted); }
+.cert-marca .logo-img { height: 70px; }
 .cert-kicker { text-transform: uppercase; letter-spacing: .3em; font-size: .85rem; color: var(--verde-escuro); font-weight: 600; margin: 1rem 0 0; }
 .certificado h1 { font-size: 2.4rem; margin: .2rem 0; border-bottom: 2px solid var(--verde); padding: 0 1.5rem .3rem; }
 .certificado p { margin: .2rem 0; }
