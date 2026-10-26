@@ -78,11 +78,38 @@
 
   // ---------- dados ----------
 
-  function montarDados(cards, checks, provas) {
-    const d = { cards: {}, checks: {}, provas: provas || [] };
+  // Só contam as tentativas da versão atual das provas (as antigas eram mais fáceis)
+  function provaValida(p) { return Number(p.versao) === CURSO.versaoProvas; }
+
+  function montarDados(cards, checks, provas, log) {
+    const d = { cards: {}, checks: {}, provas: (provas || []).filter(provaValida), log: log || [] };
     (cards || []).forEach(function (c) { d.cards[c.card_id] = c; });
     (checks || []).forEach(function (c) { d.checks[c.aula + ":" + c.task_id] = c; });
     return d;
+  }
+
+  function diaLocal(d) {
+    const x = new Date(d);
+    return x.getFullYear() + "-" + dois(x.getMonth() + 1) + "-" + dois(x.getDate());
+  }
+
+  // Regra para liberar as provas: uma semana estudando os flashcards da aula
+  function liberacaoProva(n, dados, r) {
+    const regra = CURSO.liberarProva;
+    const log = dados.log.filter(function (l) { return l.aula === n; });
+    const primeira = log.length ? new Date(Math.min.apply(null, log.map(function (l) { return new Date(l.reviewed_at); }))) : null;
+    const diasDesde = primeira ? Math.floor((Date.now() - primeira.getTime()) / 86400000) : 0;
+    const dias = {};
+    log.forEach(function (l) { dias[diaLocal(l.reviewed_at)] = true; });
+    const diasDistintos = Object.keys(dias).length;
+    const vistos = r.totalCards - r.novos;
+    const itens = [
+      { feito: !regra.todosOsCards || r.novos === 0, texto: "Ver todos os flashcards pelo menos uma vez", progresso: vistos + " de " + r.totalCards },
+      { feito: diasDesde >= regra.diasDesdeInicio, texto: "Estudar há pelo menos " + regra.diasDesdeInicio + " dias", progresso: primeira ? diasDesde + " de " + regra.diasDesdeInicio + " dias" : "ainda não começou" },
+      { feito: diasDistintos >= regra.diasDeRevisao, texto: "Revisar em pelo menos " + regra.diasDeRevisao + " dias diferentes", progresso: diasDistintos + " de " + regra.diasDeRevisao + " dias" }
+    ];
+    const libera = primeira ? new Date(primeira.getTime() + regra.diasDesdeInicio * 86400000) : null;
+    return { ok: itens.every(function (i) { return i.feito; }), itens: itens, liberaEm: libera };
   }
 
   async function carregarPerfil() {
@@ -105,10 +132,11 @@
     const res = await Promise.all([
       sb.from(T.cards).select("*").eq("user_id", uid),
       sb.from(T.praticas).select("*").eq("user_id", uid),
-      sb.from(T.provas).select("aula,tipo,nota,acertos,total,created_at").eq("user_id", uid).order("created_at", { ascending: false })
+      sb.from(T.provas).select("aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }),
+      sb.from(T.log).select("aula,reviewed_at").eq("user_id", uid)
     ]);
     res.forEach(function (r) { if (r.error) throw r.error; });
-    S.dados = montarDados(res[0].data, res[1].data, res[2].data);
+    S.dados = montarDados(res[0].data, res[1].data, res[2].data, res[3].data);
   }
 
   function resumoAula(n, dados) {
@@ -172,6 +200,7 @@
       '<a href="#/" class="marca">' + marca("escuro") + "</a>" +
       '<nav class="menu">' +
       '<a href="#/">Aulas</a>' +
+      '<a href="#/como-funciona">Como funciona</a>' +
       '<a href="#/certificado">Certificado</a>' +
       (S.perfil && S.perfil.is_admin ? '<a href="#/equipe">Equipe</a>' : "") +
       '<a href="#/perfil" class="menu-perfil">' + esc(nome.split(" ")[0]) + "</a>" +
@@ -319,6 +348,11 @@
         "<li><span>Prova teórica</span><b>" + (r.teorica === null ? "—" : Math.round(r.teorica)) + "</b>" + barra(r.teorica || 0) + "</li>" +
         "<li><span>Prova prática</span><b>" + (r.pratica === null ? "—" : Math.round(r.pratica)) + "</b>" + barra(r.pratica || 0) + "</li>" +
         "</ul>" +
+        (function () {
+          const lib = liberacaoProva(a.numero, S.dados, r);
+          if (lib.ok) return '<p class="aula-aviso ok">Provas liberadas</p>';
+          return '<p class="aula-aviso">Provas liberam ' + (lib.liberaEm ? "a partir de " + dataBR(lib.liberaEm) : "depois de uma semana de flashcards") + "</p>";
+        })() +
         '<div class="aula-acoes">' +
         (revisar ? '<a class="btn btn-primario" href="#/aula/' + a.numero + '/revisao">Revisar agora (' + revisar + ")</a>" : '<span class="ok-hoje">Revisão em dia</span>') +
         '<a class="btn btn-secundario" href="#/aula/' + a.numero + '/pratica">Abrir aula</a>' +
@@ -424,7 +458,8 @@
           : '<p class="fc-dica">Responda em voz alta antes de virar o card.</p>') +
         "</article>" +
         (rv.virado
-          ? '<div class="notas">' + botoes + "</div>"
+          ? '<p class="notas-dica">Como você se saiu? Dê uma nota honesta para você mesmo: ela não vale ponto, só define quando este card volta. <a href="#/como-funciona">Entenda</a></p>' +
+            '<div class="notas">' + botoes + "</div>"
           : '<button class="btn btn-primario btn-largo" id="rv-virar">Mostrar resposta <kbd>espaço</kbd></button>') +
         '<button class="link" id="rv-sair">Encerrar sessão</button></div>';
     }
@@ -441,7 +476,7 @@
         ? '<button class="btn btn-primario btn-largo" id="rv-iniciar">Começar revisão (' + pendentes + " cards)</button>"
         : '<p class="centro">Tudo em dia! ' + (prox ? "Próxima revisão em <b>" + dataBR(prox) + "</b>." : "") + "</p>") +
       '<button class="btn btn-secundario btn-largo" id="rv-livre">Revisão livre: todos os ' + r.totalCards + " cards, sem mexer na agenda</button>" +
-      '<p class="muted pequeno">Como funciona: depois de ver a resposta, avalie de 1 a 4. Errou, o card volta em 10 minutos. Acertou, ele some e reaparece cada vez mais espaçado (1 dia, 3 dias, ~1 semana, ~3 semanas…). É o mesmo princípio do Anki.</p>' +
+      '<p class="muted pequeno">Depois de ver a resposta, você se dá uma nota de 1 a 4 (Errei, Difícil, Bom, Fácil). Errou, o card volta em 10 minutos. Acertou, ele some e reaparece cada vez mais espaçado. É o mesmo princípio do Anki. <a href="#/como-funciona">Veja o guia completo</a>.</p>' +
       "</div>";
   }
 
@@ -474,6 +509,7 @@
       if (r1.error) { toast("Não consegui salvar: " + traduzErro(r1.error), "erro"); return; }
       S.dados.cards[id] = linha;
       sb.from(T.log).insert({ user_id: S.session.user.id, card_id: id, aula: n, nota: nota }).then(function () {});
+      S.dados.log.push({ aula: n, reviewed_at: new Date().toISOString() });
     }
     rv.fila.shift();
     if (nota === 1) rv.fila.push(id); // errou: volta no fim da fila desta sessão
@@ -521,7 +557,7 @@
     const todas = r.feitas === r.totalTarefas;
     return '<div class="painel">' +
       '<div class="linha-progresso"><span><b>' + r.feitas + "</b> de " + r.totalTarefas + " partes práticas executadas</span>" + barra(r.checklist) + "</div>" +
-      '<p class="muted">Estas são as partes práticas citadas na aula. Marque “Executei” só depois de fazer de verdade. Com tudo marcado, a prova prática é liberada.</p>' +
+      '<p class="muted">Estas são as partes práticas citadas na aula. Marque “Executei” só depois de fazer de verdade. Com tudo marcado e a semana de flashcards cumprida, a prova prática libera.</p>' +
       '<ul class="tarefas">' + itens + "</ul>" +
       (todas ? '<a class="btn btn-primario btn-largo" href="#/aula/' + n + '/prova-pratica">Fazer a prova prática</a>' : "") +
       "</div>";
@@ -553,6 +589,22 @@
 
   function corpoProva(n, tipo, r) {
     const nomeProva = tipo === "teorica" ? "Prova teórica" : "Prova prática";
+    const lib = liberacaoProva(n, S.dados, r);
+    const liberadaAdmin = S.provaAdmin === n && S.perfil && S.perfil.is_admin;
+    if (!lib.ok && !liberadaAdmin && !S.prova) {
+      const itens = lib.itens.map(function (i) {
+        return '<li class="' + (i.feito ? "feito" : "") + '"><span class="req-icone">' + (i.feito ? "✓" : "○") + "</span>" +
+          "<div><b>" + esc(i.texto) + '</b><span class="muted pequeno">' + esc(i.progresso) + "</span></div></li>";
+      }).join("");
+      return '<div class="painel centro"><h2>' + nomeProva + " bloqueada</h2>" +
+        "<p>As provas são difíceis de propósito. Elas liberam depois de uma semana estudando os flashcards desta aula.</p>" +
+        '<ul class="requisitos">' + itens + "</ul>" +
+        (lib.liberaEm ? '<p class="muted">Se você revisar com frequência, a prova libera a partir de <b>' + dataBR(lib.liberaEm) + "</b>.</p>" : "") +
+        '<div class="linha-botoes"><a class="btn btn-primario" href="#/aula/' + n + '/revisao">Ir para os flashcards</a>' +
+        '<a class="btn btn-secundario" href="#/como-funciona">Como funciona</a></div>' +
+        (S.perfil && S.perfil.is_admin ? '<button class="link" id="pv-admin">Liberar só para mim agora (teste de administrador)</button>' : "") +
+        "</div>";
+    }
     if (tipo === "pratica" && r.feitas < r.totalTarefas) {
       return '<div class="painel centro"><h2>Prova prática bloqueada</h2>' +
         "<p>Execute e marque todas as partes práticas primeiro (" + r.feitas + " de " + r.totalTarefas + " feitas).</p>" +
@@ -615,6 +667,8 @@
     const aba = tipo === "teorica" ? "teorica" : "prova-pratica";
     const ini = document.getElementById("pv-iniciar");
     if (ini) ini.onclick = function () { iniciarProva(n, tipo); telaAula(n, aba); window.scrollTo(0, 0); };
+    const adm = document.getElementById("pv-admin");
+    if (adm) adm.onclick = function () { S.provaAdmin = n; telaAula(n, aba); };
 
     document.querySelectorAll(".questoes input[type=radio]").forEach(function (rd) {
       rd.onchange = function () {
@@ -631,8 +685,11 @@
       env.disabled = true;
       const acertos = p.questoes.filter(function (q) { return p.respostas[q.id] === q.correta; }).length;
       const nota = Math.round(acertos / p.questoes.length * 10000) / 100;
-      const linha = { user_id: S.session.user.id, aula: n, tipo: tipo, acertos: acertos, total: p.questoes.length, nota: nota, respostas: p.respostas };
-      const r = await sb.from(T.provas).insert(linha).select("aula,tipo,nota,acertos,total,created_at").single();
+      const linha = {
+        user_id: S.session.user.id, aula: n, tipo: tipo, acertos: acertos, total: p.questoes.length, nota: nota,
+        respostas: Object.assign({ _versao: CURSO.versaoProvas }, p.respostas)
+      };
+      const r = await sb.from(T.provas).insert(linha).select("aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").single();
       if (r.error) { env.disabled = false; toast("Não consegui salvar a prova: " + traduzErro(r.error), "erro"); return; }
       S.dados.provas.unshift(r.data);
       p.resultado = { acertos: acertos, total: p.questoes.length, nota: nota };
@@ -665,6 +722,85 @@
       "</tbody></table>" +
       (falta.length ? '<p class="muted">Para ser aprovado nesta aula falta: ' + falta.join("; ") + ".</p>" : "") +
       '<p class="muted pequeno">Os flashcards não entram na nota: eles são a ferramenta para você chegar bem nas provas e não esquecer depois.</p></div>';
+  }
+
+  // ---------- como funciona ----------
+
+  function telaComoFunciona() {
+    const R = CURSO.liberarProva;
+    const P = CURSO.pesos;
+    // Exemplo real de agenda de um card respondido sempre com "Bom", calculado pelo próprio algoritmo
+    let estado = null;
+    const agenda = [];
+    for (let i = 0; i < 5; i++) {
+      estado = SRS.proximo(estado, 3, new Date(2026, 0, 1));
+      agenda.push(SRS.formatarIntervalo(estado.interval_days));
+    }
+
+    layout(
+      '<article class="guia">' +
+      '<p class="hero-kicker">como funciona</p>' +
+      "<h1>Como estudar no Keep Ads Academy</h1>" +
+      '<p class="guia-lead">Cada aula tem quatro partes: <b>flashcards</b> para memorizar, <b>partes práticas</b> para executar, ' +
+      "uma <b>prova teórica</b> e uma <b>prova prática</b>. Os flashcards preparam você; as provas medem se você aprendeu de verdade.</p>" +
+
+      '<section class="guia-bloco"><h2>1. Os flashcards (método Anki)</h2>' +
+      "<p>O sistema usa a <b>repetição espaçada</b>, a mesma ideia do Anki, aplicativo famoso para decorar vocabulário de idiomas. " +
+      "A gente esquece rápido o que acabou de aprender. Mas cada vez que você <b>se esforça para lembrar</b> antes de ver a resposta, a memória fica mais forte e dura mais. " +
+      "Por isso o card volta para você <b>justo quando estaria começando a esquecer</b>, e cada vez mais espaçado.</p>" +
+      '<h3>Passo a passo de cada card</h3><ol class="guia-passos">' +
+      "<li><b>Leia a pergunta</b> e responda <b>em voz alta</b> ou de cabeça, sem olhar. Esse esforço é o que fixa.</li>" +
+      "<li>Clique em <b>Mostrar resposta</b> (ou aperte a barra de espaço).</li>" +
+      "<li>Compare com o que você respondeu e <b>dê uma nota para você mesmo</b> em um dos quatro botões. Essa nota não vale ponto: ela só diz ao sistema quando o card deve voltar.</li>" +
+      "</ol>" +
+      '<div class="guia-botoes">' +
+      '<div class="nota-btn nota-1"><b>Errei</b><span>Não lembrei ou lembrei errado. O card volta em 10 minutos, ainda na mesma sessão, e recomeça do zero.</span></div>' +
+      '<div class="nota-btn nota-2"><b>Difícil</b><span>Lembrei, mas com muito esforço ou faltando partes. Volta logo, com intervalo menor.</span></div>' +
+      '<div class="nota-btn nota-3"><b>Bom</b><span>Lembrei bem, com algum esforço. É a resposta mais comum. O intervalo cresce normalmente.</span></div>' +
+      '<div class="nota-btn nota-4"><b>Fácil</b><span>Lembrei na hora, sem esforço. O intervalo cresce bem mais rápido.</span></div>' +
+      "</div>" +
+      '<p class="muted pequeno">Embaixo de cada botão aparece quando o card vai voltar se você escolher aquela opção. Atalhos: teclas 1, 2, 3 e 4.</p>' +
+      "<h3>Quando os cards voltam</h3>" +
+      "<p>Um card respondido sempre com <b>Bom</b> volta depois de: <b>" + agenda.join(" → ") + "</b>. " +
+      "Se errar em algum momento, ele volta para o começo. Por isso <b>seja honesto</b>: marcar Fácil sem saber só faz você esquecer.</p>" +
+      "<h3>O que significa cada número</h3><ul>" +
+      "<li><b>Novos:</b> cards que você ainda nunca viu.</li>" +
+      "<li><b>Para revisar:</b> cards cujo dia de voltar já chegou. Faça essa revisão todo dia: leva de 5 a 10 minutos.</li>" +
+      "<li><b>Dominados:</b> cards que você acertou tantas vezes que só voltam daqui a 7 dias ou mais.</li>" +
+      "<li><b>Revisão livre:</b> passa por todos os cards de uma vez, sem mudar a agenda. Bom para a véspera da prova.</li>" +
+      "</ul></section>" +
+
+      '<section class="guia-bloco"><h2>2. As partes práticas</h2>' +
+      "<p>São as tarefas que o Adriano pediu para executar na aula. Marque <b>Executei</b> só depois de fazer de verdade. " +
+      "Elas valem " + Math.round(P.checklist * 100) + "% da nota, e a prova prática pergunta sobre o que acontece quando você executa.</p></section>" +
+
+      '<section class="guia-bloco"><h2>3. As provas</h2>' +
+      "<p>As provas são <b>difíceis de propósito</b>: situações reais, com alternativas erradas que parecem certas. " +
+      "Só passa quem estudou os flashcards e executou as práticas.</p>" +
+      "<p><b>Quando a prova de uma aula libera:</b></p><ul>" +
+      (R.todosOsCards ? "<li>você viu todos os flashcards da aula pelo menos uma vez;</li>" : "") +
+      "<li>já se passaram <b>" + R.diasDesdeInicio + " dias</b> desde a sua primeira revisão daquela aula;</li>" +
+      "<li>você revisou em pelo menos <b>" + R.diasDeRevisao + " dias diferentes</b>;</li>" +
+      "<li>para a prova prática, você também marcou todas as partes práticas.</li></ul>" +
+      "<p>A ordem das perguntas e das alternativas muda a cada tentativa, e vale a sua <b>melhor nota</b>. Depois de enviar, você vê a explicação de cada questão.</p></section>" +
+
+      '<section class="guia-bloco"><h2>4. Nota e certificado</h2>' +
+      '<table class="tabela"><thead><tr><th>Componente</th><th>Peso</th></tr></thead><tbody>' +
+      "<tr><td>Prova teórica (melhor tentativa)</td><td>" + Math.round(P.teorica * 100) + "%</td></tr>" +
+      "<tr><td>Prova prática (melhor tentativa)</td><td>" + Math.round(P.pratica * 100) + "%</td></tr>" +
+      "<tr><td>Partes práticas executadas</td><td>" + Math.round(P.checklist * 100) + "%</td></tr>" +
+      "</tbody></table>" +
+      "<p>A aula é aprovada com nota <b>" + CURSO.notaMinima + "</b> ou mais. Com as " + CURSO.aulas.length + " aulas aprovadas, o <b>certificado</b> libera no menu Certificado.</p></section>" +
+
+      '<section class="guia-bloco"><h2>Rotina recomendada</h2><ol class="guia-passos">' +
+      "<li><b>No dia da aula:</b> veja todos os cards novos e comece as partes práticas.</li>" +
+      "<li><b>Todos os dias:</b> 10 minutos de revisão, só os cards que estão para revisar.</li>" +
+      "<li><b>Em até 48 horas:</b> aplique algo da aula num cliente real.</li>" +
+      "<li><b>Depois de uma semana:</b> faça a revisão livre e então as duas provas.</li>" +
+      "</ol></section>" +
+      '<div class="linha-botoes"><a class="btn btn-primario" href="#/">Voltar para as aulas</a></div>' +
+      "</article>"
+    );
   }
 
   // ---------- certificado ----------
@@ -720,7 +856,7 @@
       sb.from(T.perfis).select("id,nome,email,created_at").order("nome"),
       sb.from(T.cards).select("user_id,card_id,aula,interval_days,due"),
       sb.from(T.praticas).select("user_id,aula,task_id,done"),
-      sb.from(T.provas).select("user_id,aula,tipo,nota,created_at")
+      sb.from(T.provas).select("user_id,aula,tipo,nota,created_at,versao:respostas->_versao")
     ]);
     const falhou = res.find(function (r) { return r.error; });
     if (falhou) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(falhou.error)) + "</p></div>"); return; }
@@ -796,6 +932,7 @@
         case "": return telaInicio();
         case "aula": return telaAula(Number(partes[1]), partes[2] || "revisao");
         case "certificado": return telaCertificado(partes[1] === "modelo");
+        case "como-funciona": return telaComoFunciona();
         case "equipe": return telaEquipe();
         case "perfil": return telaPerfil();
         default: location.hash = "#/";
