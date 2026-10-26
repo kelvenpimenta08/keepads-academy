@@ -157,15 +157,19 @@
 
   // ---------- layout ----------
 
-  function marca() {
-    return '<span class="logo">keep<b>ads</b></span><span class="logo-sub">Academy</span>';
+  // Logo oficial Keep Ads: versão "escuro" (ads cinza claro) para fundo preto, "claro" (ads preto) para fundo branco
+  function marca(fundo) {
+    const logos = CFG.LOGOS || {};
+    const src = fundo === "claro" ? logos.claro : logos.escuro;
+    return '<span class="logo-img" role="img" aria-label="Keep Ads" style="background-image:url(\'' + encodeURI(src || "") + '\')"></span>' +
+      '<span class="logo-sub">Academy</span>';
   }
 
   function layout(conteudo) {
     const nome = (S.perfil && S.perfil.nome) || (S.session && S.session.user.email) || "";
     app.innerHTML =
       '<header class="topo"><div class="topo-in">' +
-      '<a href="#/" class="marca">' + marca() + "</a>" +
+      '<a href="#/" class="marca">' + marca("escuro") + "</a>" +
       '<nav class="menu">' +
       '<a href="#/">Aulas</a>' +
       '<a href="#/certificado">Certificado</a>' +
@@ -191,7 +195,7 @@
   function telaConfig() {
     app.innerHTML =
       '<div class="auth"><div class="auth-card">' +
-      '<div class="auth-marca">' + marca() + "</div>" +
+      '<div class="auth-marca">' + marca("claro") + "</div>" +
       "<h1>Falta conectar o banco de dados</h1>" +
       '<p class="muted">Abra o arquivo <code>js/config.js</code> e cole a URL e a chave <b>anon</b> do projeto do Supabase. O passo a passo completo está no <code>LEIA-ME.md</code>.</p>' +
       "</div></div>";
@@ -227,9 +231,9 @@
 
     app.innerHTML =
       '<div class="auth">' +
-      '<section class="auth-hero"><div class="auth-marca">' + marca() + "</div>" +
+      '<section class="auth-hero"><div class="auth-marca">' + marca("escuro") + "</div>" +
       "<h1>" + esc(CURSO.titulo) + "</h1>" +
-      "<p>Revisão espaçada no estilo Anki, provas teóricas e práticas e certificação da equipe Keepads.</p></section>" +
+      "<p>Revisão espaçada no estilo Anki, provas teóricas e práticas e certificação da equipe Keep Ads.</p></section>" +
       '<section class="auth-card">' + (modo === "esqueci" ? "<h2>Recuperar senha</h2>" : abas) +
       (aviso ? '<div class="aviso">' + esc(aviso) + "</div>" : "") +
       '<form id="form-auth">' + form + '<div class="erro" id="erro-auth"></div></form>' +
@@ -273,7 +277,7 @@
   function telaNovaSenha() {
     app.innerHTML =
       '<div class="auth"><section class="auth-card">' +
-      '<div class="auth-marca">' + marca() + "</div><h2>Crie sua senha nova</h2>" +
+      '<div class="auth-marca">' + marca("claro") + "</div><h2>Crie sua senha nova</h2>" +
       '<form id="form-senha"><label>Nova senha<input name="senha" type="password" minlength="6" required autocomplete="new-password"></label>' +
       '<button class="btn btn-primario btn-largo" type="submit">Salvar senha</button><div class="erro" id="erro-senha"></div></form>' +
       "</section></div>";
@@ -681,10 +685,10 @@
         '<div class="sem-imprimir linha-botoes"><a href="#/" class="voltar">← Voltar</a><button class="btn btn-primario" onclick="window.print()">Imprimir / salvar em PDF</button></div>' +
         (completo ? "" : '<div class="aviso sem-imprimir">Modelo de visualização (somente administradores). O certificado real só libera com as 6 aulas aprovadas.</div>') +
         '<article class="certificado"><div class="cert-borda">' +
-        '<div class="cert-marca">' + marca() + "</div>" +
+        '<div class="cert-marca">' + marca("claro") + "</div>" +
         '<p class="cert-kicker">Certificado de conclusão</p>' +
         "<p>Certificamos que</p><h1>" + esc(nome) + "</h1>" +
-        "<p>concluiu o programa de estudos interno da Keepads referente à<br><b>" + esc(CURSO.titulo) + "</b>,<br>com aprovação nas " + CURSO.aulas.length + " aulas e média final <b>" + media + "</b>.</p>" +
+        "<p>concluiu o programa de estudos interno da Keep Ads referente à<br><b>" + esc(CURSO.titulo) + "</b>,<br>com aprovação nas " + CURSO.aulas.length + " aulas e média final <b>" + media + "</b>.</p>" +
         '<div class="cert-aulas">' + situacao.map(function (x) {
           return "<span>Aula " + dois(x.a.numero) + " · <b>" + (x.r ? x.r.nota : "—") + "</b></span>";
         }).join("") + "</div>" +
