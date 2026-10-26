@@ -46,10 +46,12 @@ hr { border: 0; border-top: 1px solid var(--borda); margin: 1.5rem 0; }
 .erro { color: var(--erro); font-size: .9rem; margin-top: .5rem; }
 .carregando { padding: 4rem 1rem; text-align: center; color: var(--muted); }
 
-/* Marca: PNG oficial (1000x1000 com a logo no centro), recortado para a área da logo */
+/* Marca: PNG oficial (1000x1000), recortado só no "Keep ads" (x 180–564, y 392–606), sem o "performance & estratégia" */
 .logo-img {
-  display: inline-block; height: 38px; aspect-ratio: 636 / 214;
-  background: no-repeat center / 157.2% auto;
+  display: inline-block; height: 38px; aspect-ratio: 385 / 215;
+  background-repeat: no-repeat;
+  background-size: 259.74% auto;
+  background-position: 29.27% 49.94%;
   vertical-align: middle;
 }
 .logo-sub { font-family: var(--fonte-rotulo); font-size: .78rem; color: var(--verde); margin-left: .6rem; vertical-align: middle; }
