@@ -222,8 +222,7 @@
         '<label>E-mail<input name="email" type="email" required autocomplete="email"></label>' +
         '<label>Senha<input name="senha" type="password" required autocomplete="current-password"></label>' +
         '<button class="btn btn-primario btn-largo" type="submit">Entrar</button>' +
-        '<button type="button" class="link" data-modo="esqueci">Esqueci minha senha</button>' +
-        '<p class="muted pequeno centro">Já usa o sistema interno da Keepads com e-mail e senha? Entre com os mesmos dados.</p>';
+        '<button type="button" class="link" data-modo="esqueci">Esqueci minha senha</button>';
     }
 
     app.innerHTML =
