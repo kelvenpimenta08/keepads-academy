@@ -4,6 +4,12 @@
 // Os ids de flashcards, perguntas e práticas devem ser únicos entre TODOS os cursos
 // (use um prefixo do curso, ex.: "ds-a1-c01" para a Di Santana).
 (function () {
+  // Regras gerais do Academy (valem para todos os cursos)
+  window.ACADEMY_REGRAS = {
+    metaDiaria: 5,          // flashcards revisados no dia para contar na ofensiva (o ranking usa o mesmo número)
+    refazerProvaDias: 30    // dias de espera para refazer uma prova (o banco também garante essa regra)
+  };
+
   // Regras padrão de nota, liberação de prova e certificado (cada curso pode mudar as suas)
   const padrao = {
     notaMinima: 70,
