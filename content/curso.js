@@ -4,7 +4,7 @@
 // 3) mude "disponivel" para true aqui embaixo.
 window.CURSO = {
   titulo: "Mentoria Agentes de IA para Tráfego Pago",
-  subtitulo: "Programa de estudos e certificação interna Keepads",
+  subtitulo: "Programa de estudos e certificação interna Keep Ads",
   notaMinima: 70,
   pesos: { teorica: 0.4, pratica: 0.4, checklist: 0.2 },
   aulas: [
