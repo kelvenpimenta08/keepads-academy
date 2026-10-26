@@ -2,9 +2,13 @@
   "use strict";
 
   const CFG = window.APP_CONFIG || {};
-  const CURSO = window.CURSO;
-  const AULAS = window.AULAS;
+  const CURSOS = window.CURSOS || [];
+  const TODAS_AULAS = window.AULAS || {};
   const SRS = window.SRS;
+
+  // Curso (mentoria) aberto no momento e as aulas dele
+  let CURSO = null;
+  let AULAS = {};
 
   const configurado = /^https:\/\/.+\.supabase\.co\/?$/.test(CFG.SUPABASE_URL || "") &&
     !!CFG.SUPABASE_KEY && !CFG.SUPABASE_KEY.startsWith("COLE");
@@ -24,7 +28,9 @@
   const S = {
     session: null,
     perfil: null,
-    dados: null,          // progresso do usuário logado
+    bruto: null,          // todo o progresso do usuário logado, de todos os cursos
+    porCurso: {},         // progresso organizado por curso (montado sob demanda)
+    dados: null,          // progresso do curso aberto
     recuperacao: false,   // veio do link "esqueci a senha"
     revisao: null,        // sessão de flashcards em andamento
     prova: null           // prova em andamento
@@ -132,11 +138,56 @@
     const res = await Promise.all([
       sb.from(T.cards).select("*").eq("user_id", uid),
       sb.from(T.praticas).select("*").eq("user_id", uid),
-      sb.from(T.provas).select("aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }),
-      sb.from(T.log).select("aula,reviewed_at").eq("user_id", uid)
+      sb.from(T.provas).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }),
+      sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid)
     ]);
     res.forEach(function (r) { if (r.error) throw r.error; });
-    S.dados = montarDados(res[0].data, res[1].data, res[2].data, res[3].data);
+    S.bruto = { cards: res[0].data, checks: res[1].data, provas: res[2].data, log: res[3].data };
+    S.porCurso = {};
+    S.dados = CURSO ? dadosDoCurso(CURSO) : null;
+  }
+
+  // ---------- cursos ----------
+
+  function doCurso(c) { return function (x) { return x.curso === c.id; }; }
+
+  // Progresso de um curso, montado a partir de tudo o que foi carregado (fica em cache)
+  function dadosDoCurso(c) {
+    if (!S.porCurso[c.id]) {
+      S.porCurso[c.id] = comCurso(c, function () {
+        return montarDados(
+          S.bruto.cards.filter(doCurso(c)), S.bruto.checks.filter(doCurso(c)),
+          S.bruto.provas.filter(doCurso(c)), S.bruto.log.filter(doCurso(c))
+        );
+      });
+    }
+    return S.porCurso[c.id];
+  }
+
+  // Executa algo como se o curso "c" estivesse aberto (usado na tela de escolha de cursos)
+  function comCurso(c, fn) {
+    const antes = [CURSO, AULAS];
+    CURSO = c; AULAS = TODAS_AULAS[c.id] || {};
+    try { return fn(); } finally { CURSO = antes[0]; AULAS = antes[1]; }
+  }
+
+  function usarCurso(id) {
+    const c = CURSOS.find(function (x) { return x.id === id; });
+    if (!c) return false;
+    if (CURSO !== c) {
+      CURSO = c;
+      AULAS = TODAS_AULAS[c.id] || {};
+      S.revisao = null; S.prova = null; S.provaAdmin = null;
+    }
+    S.dados = dadosDoCurso(c);
+    return true;
+  }
+
+  // Endereço dentro do curso aberto, ex.: rota("aula/1/revisao") -> "#/c/adriano-ia-trafego/aula/1/revisao"
+  function rota(caminho) { return "#/c/" + CURSO.id + (caminho ? "/" + caminho : ""); }
+
+  function aulasDisponiveis(c) {
+    return c.aulas.filter(function (a) { return a.disponivel && (TODAS_AULAS[c.id] || {})[a.numero]; });
   }
 
   function resumoAula(n, dados) {
@@ -199,10 +250,13 @@
       '<header class="topo"><div class="topo-in">' +
       '<a href="#/" class="marca">' + marca("escuro") + "</a>" +
       '<nav class="menu">' +
-      '<a href="#/">Aulas</a>' +
+      '<a href="#/">Mentorias</a>' +
+      (S.noCurso
+        ? '<a href="' + rota("") + '">Aulas</a>' +
+          '<a href="' + rota("certificado") + '">Certificado</a>' +
+          (S.perfil && S.perfil.is_admin ? '<a href="' + rota("equipe") + '">Equipe</a>' : "")
+        : "") +
       '<a href="#/como-funciona">Como funciona</a>' +
-      '<a href="#/certificado">Certificado</a>' +
-      (S.perfil && S.perfil.is_admin ? '<a href="#/equipe">Equipe</a>' : "") +
       '<a href="#/perfil" class="menu-perfil">' + esc(nome.split(" ")[0]) + "</a>" +
       "</nav></div></header>" +
       '<main class="conteudo">' + conteudo + "</main>";
@@ -261,8 +315,8 @@
     app.innerHTML =
       '<div class="auth">' +
       '<section class="auth-hero"><div class="auth-marca">' + marca("escuro") + "</div>" +
-      "<h1>" + esc(CURSO.titulo) + "</h1>" +
-      "<p>Revisão espaçada no estilo Anki, provas teóricas e práticas e certificação da equipe Keep Ads.</p></section>" +
+      "<h1>Estude, execute e conquiste o seu certificado.</h1>" +
+      "<p>As mentorias e cursos da Keep Ads em um só lugar: revisão espaçada no estilo Anki, partes práticas, provas e certificação.</p></section>" +
       '<section class="auth-card">' + (modo === "esqueci" ? "<h2>Recuperar senha</h2>" : abas) +
       (aviso ? '<div class="aviso">' + esc(aviso) + "</div>" : "") +
       '<form id="form-auth">' + form + '<div class="erro" id="erro-auth"></div></form>' +
@@ -321,7 +375,54 @@
     });
   }
 
-  // ---------- tela inicial ----------
+  // ---------- escolha da mentoria / curso ----------
+
+  function iniciais(nome) {
+    return String(nome || "").split(" ").filter(Boolean).map(function (p) { return p[0]; }).slice(0, 2).join("").toUpperCase();
+  }
+
+  function telaCursos() {
+    const primeiroNome = ((S.perfil && S.perfil.nome) || "").split(" ")[0];
+    const cards = CURSOS.map(function (c) {
+      const disponiveis = aulasDisponiveis(c);
+      let status, linha;
+      if (!disponiveis.length) {
+        status = '<span class="chip chip-cinza">Em breve</span>';
+        linha = "Conteúdo em preparação";
+      } else {
+        const dados = dadosDoCurso(c);
+        const resumos = comCurso(c, function () {
+          return disponiveis.map(function (a) { return resumoAula(a.numero, dados); });
+        });
+        const aprovadas = resumos.filter(function (r) { return r.aprovado; }).length;
+        const revisar = resumos.reduce(function (s, r) { return s + r.vencidos + r.novos; }, 0);
+        const comecou = resumos.some(function (r) { return r.novos < r.totalCards || r.feitas > 0; });
+        status = aprovadas === c.aulas.length ? '<span class="chip chip-ok">Concluída</span>'
+          : comecou ? '<span class="chip chip-aviso">Em andamento</span>' : '<span class="chip chip-cinza">Não iniciada</span>';
+        linha = aprovadas + "/" + c.aulas.length + " aulas aprovadas" + (revisar ? " · <b>" + revisar + " flashcards para hoje</b>" : "");
+      }
+      const capa = c.imagem
+        ? '<div class="curso-capa" style="background-image:url(\'' + encodeURI(c.imagem) + '\')"></div>'
+        : '<div class="curso-capa curso-capa-padrao"><span class="curso-iniciais">' + esc(iniciais(c.mentor)) + "</span>" +
+          '<span class="curso-capa-tipo">' + esc(c.tipo) + "</span></div>";
+      return '<a class="curso-card" href="#/c/' + encodeURIComponent(c.id) + '">' + capa +
+        '<div class="curso-info"><div class="curso-topo"><span class="curso-mentor">' + esc(c.mentor) + "</span>" + status + "</div>" +
+        "<h2>" + esc(c.titulo) + "</h2>" +
+        '<p class="muted">' + esc(c.descricao) + "</p>" +
+        '<p class="curso-linha">' + linha + "</p>" +
+        '<span class="curso-entrar">Entrar →</span></div></a>';
+    }).join("");
+
+    layout(
+      '<section class="hero hero-cursos"><div>' +
+      '<p class="hero-kicker">keep ads academy</p>' +
+      "<h1>Olá" + (primeiroNome ? ", " + esc(primeiroNome) : "") + "! Qual mentoria você vai estudar hoje?</h1>" +
+      "<p>Escolha a mentoria ou o curso para ver as aulas, revisar os flashcards, executar as práticas e fazer as provas.</p></div></section>" +
+      '<section class="grade-cursos">' + cards + "</section>"
+    );
+  }
+
+  // ---------- tela inicial do curso ----------
 
   function telaInicio() {
     const aulas = CURSO.aulas.map(function (a) {
@@ -354,19 +455,27 @@
           return '<p class="aula-aviso">Provas liberam ' + (lib.liberaEm ? "a partir de " + dataBR(lib.liberaEm) : "depois de uma semana de flashcards") + "</p>";
         })() +
         '<div class="aula-acoes">' +
-        (revisar ? '<a class="btn btn-primario" href="#/aula/' + a.numero + '/revisao">Revisar agora (' + revisar + ")</a>" : '<span class="ok-hoje">Revisão em dia</span>') +
-        '<a class="btn btn-secundario" href="#/aula/' + a.numero + '/pratica">Abrir aula</a>' +
+        (revisar ? '<a class="btn btn-primario" href="' + rota("aula/" + a.numero) + '/revisao">Revisar agora (' + revisar + ")</a>" : '<span class="ok-hoje">Revisão em dia</span>') +
+        '<a class="btn btn-secundario" href="' + rota("aula/" + a.numero) + '/pratica">Abrir aula</a>' +
         "</div></article>";
     }).join("");
 
+    const semAulas = !CURSO.aulas.length;
     layout(
+      '<a href="#/" class="voltar">← Todas as mentorias</a>' +
       '<section class="hero"><div>' +
-      '<p class="hero-kicker">' + esc(CURSO.subtitulo) + "</p>" +
-      "<h1>Olá" + (primeiroNome ? ", " + esc(primeiroNome) : "") + "!</h1>" +
-      "<p>" + (paraHoje ? "Você tem <b>" + paraHoje + " flashcards</b> para revisar hoje." : "Nenhum flashcard pendente hoje. Bom trabalho!") + "</p></div>" +
+      '<p class="hero-kicker">' + esc(CURSO.tipo) + " · " + esc(CURSO.mentor) + "</p>" +
+      "<h1>" + esc(CURSO.titulo) + "</h1>" +
+      "<p>" + (semAulas
+        ? "Olá" + (primeiroNome ? ", " + esc(primeiroNome) : "") + "! As aulas desta mentoria ainda vão entrar aqui."
+        : (primeiroNome ? esc(primeiroNome) + ", v" : "V") + (paraHoje ? "ocê tem <b>" + paraHoje + " flashcards</b> para revisar hoje." : "ocê não tem flashcards pendentes hoje. Bom trabalho!")) +
+      "</p></div>" +
       '<div class="hero-stats"><div><b>' + aprovadas + "/" + CURSO.aulas.length + "</b><span>aulas aprovadas</span></div>" +
       "<div><b>" + CURSO.notaMinima + "</b><span>nota mínima</span></div></div></section>" +
-      '<section class="grade-aulas">' + cards + "</section>" +
+      (semAulas
+        ? '<section class="painel centro vazio"><h2>Conteúdo em preparação</h2><p class="muted">' + esc(CURSO.descricao) +
+          "</p><p>Assim que a primeira aula for liberada, os flashcards, as partes práticas e as provas aparecem aqui.</p></section>"
+        : '<section class="grade-aulas">' + cards + "</section>") +
       '<section class="metodo"><h2>Como estudar para fixar de verdade</h2><ol>' +
       "<li><b>Faça a parte prática antes de reler.</b> Execute cada tarefa e marque “Executei”.</li>" +
       "<li><b>Responda em voz alta antes de virar o card.</b> Lembrar sem olhar é o que fixa.</li>" +
@@ -390,14 +499,14 @@
   function telaAula(n, aba) {
     const aula = AULAS[n];
     const info = CURSO.aulas.find(function (a) { return a.numero === n; });
-    if (!aula || !info || !info.disponivel) { location.hash = "#/"; return; }
+    if (!aula || !info || !info.disponivel) { location.hash = rota(""); return; }
     if (S.revisao && (S.revisao.aula !== n || aba !== "revisao")) S.revisao = null;
     const tipoProva = aba === "teorica" ? "teorica" : aba === "prova-pratica" ? "pratica" : null;
     if (S.prova && (S.prova.aula !== n || S.prova.tipo !== tipoProva)) S.prova = null;
 
     const r = resumoAula(n, S.dados);
     const abas = ABAS.map(function (x) {
-      return '<a href="#/aula/' + n + "/" + x[0] + '" class="' + (x[0] === aba ? "ativo" : "") + '">' + x[1] + "</a>";
+      return '<a href="' + rota("aula/" + n + "/" + x[0]) + '" class="' + (x[0] === aba ? "ativo" : "") + '">' + x[1] + "</a>";
     }).join("");
 
     let corpo;
@@ -408,7 +517,7 @@
     else corpo = corpoRevisao(n, aula, r);
 
     layout(
-      '<a href="#/" class="voltar">← Todas as aulas</a>' +
+      '<a href="' + rota("") + '" class="voltar">← Todas as aulas</a>' +
       '<header class="aula-cabeca"><div><div class="aula-num">Aula ' + dois(n) + "</div><h1>" + esc(aula.titulo) + "</h1>" +
       '<p class="muted">' + esc(aula.resumo) + "</p></div>" +
       '<div class="aula-cabeca-nota"><b>' + r.nota + "</b><span>nota atual</span>" + chipStatus(r) + "</div></header>" +
@@ -503,13 +612,13 @@
     if (!rv.livre) {
       rv.salvando = true;
       const novo = SRS.proximo(S.dados.cards[id], nota);
-      const linha = Object.assign({ user_id: S.session.user.id, card_id: id, aula: n }, novo);
+      const linha = Object.assign({ user_id: S.session.user.id, curso: CURSO.id, card_id: id, aula: n }, novo);
       const r1 = await sb.from(T.cards).upsert(linha);
       rv.salvando = false;
       if (r1.error) { toast("Não consegui salvar: " + traduzErro(r1.error), "erro"); return; }
       S.dados.cards[id] = linha;
-      sb.from(T.log).insert({ user_id: S.session.user.id, card_id: id, aula: n, nota: nota }).then(function () {});
-      S.dados.log.push({ aula: n, reviewed_at: new Date().toISOString() });
+      sb.from(T.log).insert({ user_id: S.session.user.id, curso: CURSO.id, card_id: id, aula: n, nota: nota }).then(function () {});
+      S.dados.log.push({ curso: CURSO.id, aula: n, reviewed_at: new Date().toISOString() });
     }
     rv.fila.shift();
     if (nota === 1) rv.fila.push(id); // errou: volta no fim da fila desta sessão
@@ -559,7 +668,7 @@
       '<div class="linha-progresso"><span><b>' + r.feitas + "</b> de " + r.totalTarefas + " partes práticas executadas</span>" + barra(r.checklist) + "</div>" +
       '<p class="muted">Estas são as partes práticas citadas na aula. Marque “Executei” só depois de fazer de verdade. Com tudo marcado e a semana de flashcards cumprida, a prova prática libera.</p>' +
       '<ul class="tarefas">' + itens + "</ul>" +
-      (todas ? '<a class="btn btn-primario btn-largo" href="#/aula/' + n + '/prova-pratica">Fazer a prova prática</a>' : "") +
+      (todas ? '<a class="btn btn-primario btn-largo" href="' + rota("aula/" + n) + '/prova-pratica">Fazer a prova prática</a>' : "") +
       "</div>";
   }
 
@@ -568,7 +677,7 @@
       cb.onchange = async function () {
         cb.disabled = true;
         const linha = {
-          user_id: S.session.user.id, aula: n, task_id: cb.dataset.tarefa,
+          user_id: S.session.user.id, curso: CURSO.id, aula: n, task_id: cb.dataset.tarefa,
           done: cb.checked, done_at: cb.checked ? new Date().toISOString() : null
         };
         const r = await sb.from(T.praticas).upsert(linha);
@@ -600,7 +709,7 @@
         "<p>As provas são difíceis de propósito. Elas liberam depois de uma semana estudando os flashcards desta aula.</p>" +
         '<ul class="requisitos">' + itens + "</ul>" +
         (lib.liberaEm ? '<p class="muted">Se você revisar com frequência, a prova libera a partir de <b>' + dataBR(lib.liberaEm) + "</b>.</p>" : "") +
-        '<div class="linha-botoes"><a class="btn btn-primario" href="#/aula/' + n + '/revisao">Ir para os flashcards</a>' +
+        '<div class="linha-botoes"><a class="btn btn-primario" href="' + rota("aula/" + n) + '/revisao">Ir para os flashcards</a>' +
         '<a class="btn btn-secundario" href="#/como-funciona">Como funciona</a></div>' +
         (S.perfil && S.perfil.is_admin ? '<button class="link" id="pv-admin">Liberar só para mim agora (teste de administrador)</button>' : "") +
         "</div>";
@@ -608,7 +717,7 @@
     if (tipo === "pratica" && r.feitas < r.totalTarefas) {
       return '<div class="painel centro"><h2>Prova prática bloqueada</h2>' +
         "<p>Execute e marque todas as partes práticas primeiro (" + r.feitas + " de " + r.totalTarefas + " feitas).</p>" +
-        '<a class="btn btn-primario" href="#/aula/' + n + '/pratica">Ir para as partes práticas</a></div>';
+        '<a class="btn btn-primario" href="' + rota("aula/" + n) + '/pratica">Ir para as partes práticas</a></div>';
     }
     const p = S.prova;
     if (p && p.resultado) {
@@ -625,7 +734,7 @@
         p.resultado.acertos + " de " + p.resultado.total + " acertos</span><p>" +
         (ok ? "Mandou bem! Revise as que errou abaixo." : "Ainda abaixo de " + CURSO.notaMinima + ". Revise as explicações e os flashcards e tente de novo.") + "</p></div>" +
         '<ol class="correcao">' + lista + "</ol>" +
-        '<div class="linha-botoes"><button class="btn btn-primario" id="pv-iniciar">Fazer de novo</button><a class="btn btn-secundario" href="#/aula/' + n + '/nota">Ver nota da aula</a></div></div>';
+        '<div class="linha-botoes"><button class="btn btn-primario" id="pv-iniciar">Fazer de novo</button><a class="btn btn-secundario" href="' + rota("aula/" + n) + '/nota">Ver nota da aula</a></div></div>';
     }
     if (p) {
       const respondidas = Object.keys(p.respostas).length;
@@ -686,10 +795,10 @@
       const acertos = p.questoes.filter(function (q) { return p.respostas[q.id] === q.correta; }).length;
       const nota = Math.round(acertos / p.questoes.length * 10000) / 100;
       const linha = {
-        user_id: S.session.user.id, aula: n, tipo: tipo, acertos: acertos, total: p.questoes.length, nota: nota,
+        user_id: S.session.user.id, curso: CURSO.id, aula: n, tipo: tipo, acertos: acertos, total: p.questoes.length, nota: nota,
         respostas: Object.assign({ _versao: CURSO.versaoProvas }, p.respostas)
       };
-      const r = await sb.from(T.provas).insert(linha).select("aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").single();
+      const r = await sb.from(T.provas).insert(linha).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").single();
       if (r.error) { env.disabled = false; toast("Não consegui salvar a prova: " + traduzErro(r.error), "erro"); return; }
       S.dados.provas.unshift(r.data);
       p.resultado = { acertos: acertos, total: p.questoes.length, nota: nota };
@@ -716,9 +825,9 @@
       '<div class="resultado ' + (r.aprovado ? "ok" : "baixo") + '"><b>' + r.nota + "</b><span>" +
       (r.aprovado ? "Aula aprovada" : "Nota mínima: " + CURSO.notaMinima) + "</span></div>" +
       '<table class="tabela"><thead><tr><th>Componente</th><th>Peso</th><th>Nota</th><th></th><th></th></tr></thead><tbody>' +
-      linha("Prova teórica", r.teorica, P.teorica, "#/aula/" + n + "/teorica") +
-      linha("Prova prática", r.pratica, P.pratica, "#/aula/" + n + "/prova-pratica") +
-      linha("Partes práticas executadas", r.checklist, P.checklist, "#/aula/" + n + "/pratica") +
+      linha("Prova teórica", r.teorica, P.teorica, rota("aula/" + n) + "/teorica") +
+      linha("Prova prática", r.pratica, P.pratica, rota("aula/" + n) + "/prova-pratica") +
+      linha("Partes práticas executadas", r.checklist, P.checklist, rota("aula/" + n) + "/pratica") +
       "</tbody></table>" +
       (falta.length ? '<p class="muted">Para ser aprovado nesta aula falta: ' + falta.join("; ") + ".</p>" : "") +
       '<p class="muted pequeno">Os flashcards não entram na nota: eles são a ferramenta para você chegar bem nas provas e não esquecer depois.</p></div>';
@@ -727,8 +836,9 @@
   // ---------- como funciona ----------
 
   function telaComoFunciona() {
-    const R = CURSO.liberarProva;
-    const P = CURSO.pesos;
+    const ref = CURSO || CURSOS[0];   // regras do curso aberto (ou as padrão)
+    const R = ref.liberarProva;
+    const P = ref.pesos;
     // Exemplo real de agenda de um card respondido sempre com "Bom", calculado pelo próprio algoritmo
     let estado = null;
     const agenda = [];
@@ -741,7 +851,7 @@
       '<article class="guia">' +
       '<p class="hero-kicker">como funciona</p>' +
       "<h1>Como estudar no Keep Ads Academy</h1>" +
-      '<p class="guia-lead">Cada aula tem quatro partes: <b>flashcards</b> para memorizar, <b>partes práticas</b> para executar, ' +
+      '<p class="guia-lead">Primeiro você escolhe a mentoria ou o curso. Dentro dele, cada aula tem quatro partes: <b>flashcards</b> para memorizar, <b>partes práticas</b> para executar, ' +
       "uma <b>prova teórica</b> e uma <b>prova prática</b>. Os flashcards preparam você; as provas medem se você aprendeu de verdade.</p>" +
 
       '<section class="guia-bloco"><h2>1. Os flashcards (método Anki)</h2>' +
@@ -771,7 +881,7 @@
       "</ul></section>" +
 
       '<section class="guia-bloco"><h2>2. As partes práticas</h2>' +
-      "<p>São as tarefas que o Adriano pediu para executar na aula. Marque <b>Executei</b> só depois de fazer de verdade. " +
+      "<p>São as tarefas que o mentor pediu para executar na aula. Marque <b>Executei</b> só depois de fazer de verdade. " +
       "Elas valem " + Math.round(P.checklist * 100) + "% da nota, e a prova prática pergunta sobre o que acontece quando você executa.</p></section>" +
 
       '<section class="guia-bloco"><h2>3. As provas</h2>' +
@@ -790,7 +900,7 @@
       "<tr><td>Prova prática (melhor tentativa)</td><td>" + Math.round(P.pratica * 100) + "%</td></tr>" +
       "<tr><td>Partes práticas executadas</td><td>" + Math.round(P.checklist * 100) + "%</td></tr>" +
       "</tbody></table>" +
-      "<p>A aula é aprovada com nota <b>" + CURSO.notaMinima + "</b> ou mais. Com as " + CURSO.aulas.length + " aulas aprovadas, o <b>certificado</b> libera no menu Certificado.</p></section>" +
+      "<p>A aula é aprovada com nota <b>" + ref.notaMinima + "</b> ou mais. Com todas as aulas da mentoria aprovadas, o <b>certificado</b> daquela mentoria libera no menu Certificado.</p></section>" +
 
       '<section class="guia-bloco"><h2>Rotina recomendada</h2><ol class="guia-passos">' +
       "<li><b>No dia da aula:</b> veja todos os cards novos e comece as partes práticas.</li>" +
@@ -798,7 +908,7 @@
       "<li><b>Em até 48 horas:</b> aplique algo da aula num cliente real.</li>" +
       "<li><b>Depois de uma semana:</b> faça a revisão livre e então as duas provas.</li>" +
       "</ol></section>" +
-      '<div class="linha-botoes"><a class="btn btn-primario" href="#/">Voltar para as aulas</a></div>' +
+      '<div class="linha-botoes"><a class="btn btn-primario" href="' + (CURSO ? rota("") : "#/") + '">' + (CURSO ? "Voltar para as aulas" : "Ir para as mentorias") + "</a></div>" +
       "</article>"
     );
   }
@@ -810,21 +920,21 @@
       const r = a.disponivel && AULAS[a.numero] ? resumoAula(a.numero, S.dados) : null;
       return { a: a, r: r };
     });
-    const completo = situacao.every(function (x) { return x.r && x.r.aprovado; });
+    const completo = situacao.length > 0 && situacao.every(function (x) { return x.r && x.r.aprovado; });
     const nome = (S.perfil && S.perfil.nome) || S.session.user.email;
 
-    if (completo || (modelo && S.perfil && S.perfil.is_admin)) {
+    if (completo || (modelo && S.perfil && S.perfil.is_admin && situacao.length)) {
       const notas = situacao.map(function (x) { return x.r ? x.r.nota : 0; });
       const media = Math.round(notas.reduce(function (s, v) { return s + v; }, 0) / notas.length);
       const codigo = S.session.user.id.replace(/-/g, "").slice(0, 10).toUpperCase();
       layout(
-        '<div class="sem-imprimir linha-botoes"><a href="#/" class="voltar">← Voltar</a><button class="btn btn-primario" onclick="window.print()">Imprimir / salvar em PDF</button></div>' +
+        '<div class="sem-imprimir linha-botoes"><a href="' + rota("") + '" class="voltar">← Voltar</a><button class="btn btn-primario" onclick="window.print()">Imprimir / salvar em PDF</button></div>' +
         (completo ? "" : '<div class="aviso sem-imprimir">Modelo de visualização (somente administradores). O certificado real só libera com as 6 aulas aprovadas.</div>') +
         '<article class="certificado"><div class="cert-borda">' +
         '<div class="cert-marca">' + marca("claro") + "</div>" +
         '<p class="cert-kicker">Certificado de conclusão</p>' +
         "<p>Certificamos que</p><h1>" + esc(nome) + "</h1>" +
-        "<p>concluiu o programa de estudos interno da Keep Ads referente à<br><b>" + esc(CURSO.titulo) + "</b>,<br>com aprovação nas " + CURSO.aulas.length + " aulas e média final <b>" + media + "</b>.</p>" +
+        "<p>concluiu o programa de estudos interno da Keep Ads referente à<br><b>" + esc(CURSO.tipo + " " + CURSO.titulo) + "</b>, de " + esc(CURSO.mentor) + ",<br>com aprovação nas " + CURSO.aulas.length + " aulas e média final <b>" + media + "</b>.</p>" +
         '<div class="cert-aulas">' + situacao.map(function (x) {
           return "<span>Aula " + dois(x.a.numero) + " · <b>" + (x.r ? x.r.nota : "—") + "</b></span>";
         }).join("") + "</div>" +
@@ -840,9 +950,12 @@
     }).join("");
     layout(
       '<div class="painel centro"><h1>Certificado</h1>' +
-      "<p>O certificado libera quando as " + CURSO.aulas.length + " aulas estiverem aprovadas (nota " + CURSO.notaMinima + " ou mais em cada uma).</p>" +
+      '<p class="muted">' + esc(CURSO.tipo + " " + CURSO.titulo + " · " + CURSO.mentor) + "</p>" +
+      (CURSO.aulas.length
+        ? "<p>O certificado libera quando as " + CURSO.aulas.length + " aulas estiverem aprovadas (nota " + CURSO.notaMinima + " ou mais em cada uma).</p>"
+        : "<p>As aulas desta mentoria ainda não foram liberadas.</p>") +
       '<ul class="lista-cert">' + itens + "</ul>" +
-      (S.perfil && S.perfil.is_admin ? '<a class="btn btn-secundario" href="#/certificado/modelo">Ver modelo do certificado</a>' : "") +
+      (S.perfil && S.perfil.is_admin && CURSO.aulas.length ? '<a class="btn btn-secundario" href="' + rota("certificado/modelo") + '">Ver modelo do certificado</a>' : "") +
       "</div>"
     );
   }
@@ -854,9 +967,9 @@
     layout('<div class="painel centro"><p>Carregando a equipe…</p></div>');
     const res = await Promise.all([
       sb.from(T.perfis).select("id,nome,email,created_at").order("nome"),
-      sb.from(T.cards).select("user_id,card_id,aula,interval_days,due"),
-      sb.from(T.praticas).select("user_id,aula,task_id,done"),
-      sb.from(T.provas).select("user_id,aula,tipo,nota,created_at,versao:respostas->_versao")
+      sb.from(T.cards).select("user_id,card_id,aula,interval_days,due").eq("curso", CURSO.id),
+      sb.from(T.praticas).select("user_id,aula,task_id,done").eq("curso", CURSO.id),
+      sb.from(T.provas).select("user_id,aula,tipo,nota,created_at,versao:respostas->_versao").eq("curso", CURSO.id)
     ]);
     const falhou = res.find(function (r) { return r.error; });
     if (falhou) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(falhou.error)) + "</p></div>"); return; }
@@ -885,7 +998,10 @@
     }).join("");
 
     layout(
-      '<h1>Equipe</h1><p class="muted">Progresso de todo mundo que criou conta. ' + linhas.length + " pessoa(s).</p>" +
+      '<a href="' + rota("") + '" class="voltar">← Voltar para as aulas</a>' +
+      "<h1>Equipe</h1><p class=\"muted\">" + esc(CURSO.tipo + " " + CURSO.titulo + " · " + CURSO.mentor) +
+      ". Progresso de todo mundo que criou conta: " + linhas.length + " pessoa(s).</p>" +
+      (disponiveis.length ? "" : '<p class="aviso">Esta mentoria ainda não tem aulas liberadas.</p>') +
       '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th>' + cab + "<th>Aprovadas</th><th>Última prova</th></tr></thead><tbody>" + corpo + "</tbody></table></div>"
     );
   }
@@ -922,18 +1038,28 @@
     if (S.recuperacao) return telaNovaSenha();
     if (!S.session) return telaLogin();
     try {
-      if (!S.perfil || !S.dados) {
+      if (!S.perfil || !S.bruto) {
         app.innerHTML = '<div class="carregando">Carregando…</div>';
         await carregarPerfil();
         await carregarDados();
       }
-      const partes = location.hash.replace(/^#\/?/, "").split("/");
+      const partes = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+      S.noCurso = partes[0] === "c";
+      if (S.noCurso) {
+        // Dentro de uma mentoria: #/c/{curso}/aula/1/revisao, #/c/{curso}/certificado ...
+        if (!usarCurso(partes[1])) { location.hash = "#/"; return; }
+        switch (partes[2] || "") {
+          case "": return telaInicio();
+          case "aula": return telaAula(Number(partes[3]), partes[4] || "revisao");
+          case "certificado": return telaCertificado(partes[3] === "modelo");
+          case "equipe": return telaEquipe();
+          default: location.hash = rota("");
+        }
+        return;
+      }
       switch (partes[0]) {
-        case "": return telaInicio();
-        case "aula": return telaAula(Number(partes[1]), partes[2] || "revisao");
-        case "certificado": return telaCertificado(partes[1] === "modelo");
+        case "": return telaCursos();
         case "como-funciona": return telaComoFunciona();
-        case "equipe": return telaEquipe();
         case "perfil": return telaPerfil();
         default: location.hash = "#/";
       }
@@ -952,7 +1078,7 @@
       S.session = session;
       if (evento === "PASSWORD_RECOVERY") { S.recuperacao = true; rotear(); return; }
       if (trocouUsuario) {
-        S.perfil = null; S.dados = null; S.revisao = null; S.prova = null;
+        S.perfil = null; S.bruto = null; S.porCurso = {}; S.dados = null; S.revisao = null; S.prova = null;
         setTimeout(rotear, 0);
       }
     });
