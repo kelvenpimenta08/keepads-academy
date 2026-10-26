@@ -140,5 +140,75 @@ alter table public.academy_review_log add column if not exists curso text not nu
 alter table public.academy_practice_checks add column if not exists curso text not null default 'adriano-ia-trafego';
 alter table public.academy_quiz_attempts add column if not exists curso text not null default 'adriano-ia-trafego';
 
+-- Prova: uma tentativa a cada 30 dias (por pessoa, curso, aula, tipo e versão da prova)
+create or replace function public.academy_bloquear_refazer()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if exists (
+    select 1 from public.academy_quiz_attempts q
+    where q.user_id = new.user_id and q.curso = new.curso and q.aula = new.aula and q.tipo = new.tipo
+      and coalesce(q.respostas ->> '_versao', '') = coalesce(new.respostas ->> '_versao', '')
+      and q.created_at > now() - interval '30 days'
+  ) then
+    raise exception 'Você já fez esta prova. A próxima tentativa libera 30 dias depois da anterior.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger academy_quiz_refazer
+  before insert on public.academy_quiz_attempts
+  for each row execute function public.academy_bloquear_refazer();
+
+-- Ranking de uma mentoria: melhor nota de cada prova (da versão atual) e ofensiva de cada pessoa.
+-- Ofensiva = dias seguidos (horário de Brasília) com pelo menos p_meta flashcards revisados, em qualquer curso.
+-- Participa do ranking quem já estudou ou fez prova naquela mentoria.
+create or replace function public.academy_ranking(p_curso text, p_versao int, p_meta int)
+returns table (user_id uuid, nome text, provas_feitas int, media numeric, ofensiva int)
+language sql stable security definer set search_path = public
+as $$
+  with dias as (
+    select l.user_id, (l.reviewed_at at time zone 'America/Sao_Paulo')::date as dia
+    from public.academy_review_log l
+    group by 1, 2
+    having count(*) >= p_meta
+  ),
+  grupos as (
+    select d.user_id, d.dia, d.dia - (row_number() over (partition by d.user_id order by d.dia))::int as grupo
+    from dias d
+  ),
+  sequencias as (
+    select g.user_id, max(g.dia) as fim, count(*)::int as tamanho
+    from grupos g group by g.user_id, g.grupo
+  ),
+  atual as (
+    select s.user_id, max(s.tamanho) as ofensiva from sequencias s
+    where s.fim >= (now() at time zone 'America/Sao_Paulo')::date - 1
+    group by s.user_id
+  ),
+  provas as (
+    select q.user_id, q.aula, q.tipo, max(q.nota) as nota
+    from public.academy_quiz_attempts q
+    where q.curso = p_curso and q.respostas ->> '_versao' = p_versao::text
+    group by q.user_id, q.aula, q.tipo
+  ),
+  participantes as (
+    select distinct l.user_id from public.academy_review_log l where l.curso = p_curso
+    union
+    select distinct q.user_id from public.academy_quiz_attempts q where q.curso = p_curso
+  )
+  select p.id, p.nome, count(pr.nota)::int, round(avg(pr.nota), 1), coalesce(max(a.ofensiva), 0)::int
+  from participantes pa
+  join public.academy_profiles p on p.id = pa.user_id
+  left join provas pr on pr.user_id = p.id
+  left join atual a on a.user_id = p.id
+  group by p.id, p.nome;
+$$;
+
+revoke execute on function public.academy_ranking(text, int, int) from public, anon;
+grant execute on function public.academy_ranking(text, int, int) to authenticated;
+
 -- A primeira pessoa que entrar no Academy vira administradora. Para promover outra depois:
 -- update public.academy_profiles set is_admin = true where email = 'email-da-pessoa@exemplo.com';
