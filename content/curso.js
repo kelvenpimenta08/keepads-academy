@@ -34,7 +34,7 @@
       versaoProvas: 2,
       aulas: [
         { numero: 1, titulo: "Contexto, cérebros e APIs", disponivel: true },
-        { numero: 2, titulo: "Aula 2", disponivel: false },
+        { numero: 2, titulo: "Sistema no ar, loops e a primeira skill", disponivel: true },
         { numero: 3, titulo: "Aula 3", disponivel: false },
         { numero: 4, titulo: "Aula 4", disponivel: false },
         { numero: 5, titulo: "Aula 5", disponivel: false },
