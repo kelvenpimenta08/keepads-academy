@@ -440,6 +440,59 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .bt-ir { width: 100%; }
 }
 
+/* ---------- Resumo por hora ---------- */
+.resumo-aula > * + * { margin-top: .9rem; }
+.fase { border: 1px solid var(--borda); border-radius: 14px; overflow: hidden; background: #fff; }
+.fase[open] { border-color: #b9e8e2; box-shadow: var(--sombra); }
+.fase summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: .8rem; padding: 1rem 1.2rem; flex-wrap: wrap;
+}
+.fase summary::-webkit-details-marker { display: none; }
+.fase summary::after { content: "+"; margin-left: auto; font-size: 1.4rem; line-height: 1; color: var(--verde-escuro); transition: transform .2s; }
+.fase[open] summary::after { transform: rotate(45deg); }
+.fase-hora { background: var(--preto); color: var(--verde); font-family: var(--fonte-rotulo); font-size: .78rem; padding: .25rem .6rem; border-radius: 99px; white-space: nowrap; }
+.fase-titulo { font-family: var(--fonte-titulo); font-weight: 700; font-size: 1.08rem; flex: 1; min-width: 12rem; }
+.fase-tempo { font-family: var(--fonte-rotulo); font-size: .75rem; color: var(--muted); }
+.fase-corpo { padding: 0 1.2rem 1.2rem; display: grid; gap: .9rem; }
+.fase-ideia { margin: 0; font-size: 1rem; background: var(--fundo); border-left: 4px solid var(--verde); border-radius: 8px; padding: .8rem 1rem; }
+.fase-colunas { display: grid; grid-template-columns: 1.3fr 1fr; gap: 1rem; }
+.fase-bloco { border-radius: 12px; padding: .9rem 1rem; }
+.fase-bloco h3 { margin: 0 0 .5rem; font-size: 1rem; }
+.fase-bloco ul { margin: 0; padding-left: 1.1rem; display: grid; gap: .45rem; font-size: .93rem; }
+.fase-aprender { background: #f3faf8; }
+.fase-executar { background: #fff7ea; }
+.fase-frase { margin: 0; font-style: italic; color: var(--muted); border-left: 3px solid var(--borda); padding-left: .9rem; }
+
+/* ---------- Mapa mental ---------- */
+.mapa-painel > * + * { margin-top: 1rem; }
+.mapa { position: relative; display: grid; grid-template-columns: 1fr minmax(170px, 220px) 1fr; gap: 1rem 3.5rem; align-items: center; padding: .5rem 0; }
+.mapa-linhas { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.mapa-linhas path { fill: none; stroke-width: 2.5; stroke: var(--cor-ramo, var(--verde)); opacity: .55; }
+.mapa-lado { display: grid; gap: 1rem; position: relative; z-index: 1; }
+.mapa-centro {
+  position: relative; z-index: 1; background: var(--preto); color: #fff; border-radius: 20px; padding: 1.3rem 1rem; text-align: center;
+  display: grid; gap: .3rem; box-shadow: 0 10px 30px rgba(0, 202, 158, .25);
+}
+.mapa-centro span { font-family: var(--fonte-rotulo); font-size: .75rem; color: var(--verde); text-transform: lowercase; }
+.mapa-centro b { font-family: var(--fonte-titulo); font-size: 1.2rem; line-height: 1.2; }
+.mapa-ramo { background: #fff; border: 1px solid var(--borda); border-top: 4px solid var(--cor-ramo); border-radius: 14px; padding: .8rem 1rem; box-shadow: var(--sombra); }
+.mapa-ramo b { font-family: var(--fonte-titulo); font-size: 1rem; color: var(--cor-ramo-texto, var(--texto)); }
+.mapa-ramo ul { margin: .4rem 0 0; padding-left: 1.05rem; display: grid; gap: .2rem; font-size: .86rem; }
+[data-cor="0"] { --cor-ramo: #00ca9e; --cor-ramo-texto: #007f63; }
+[data-cor="1"] { --cor-ramo: #3b82f6; --cor-ramo-texto: #1d4ed8; }
+[data-cor="2"] { --cor-ramo: #f59e0b; --cor-ramo-texto: #b45309; }
+[data-cor="3"] { --cor-ramo: #8b5cf6; --cor-ramo-texto: #6d28d9; }
+[data-cor="4"] { --cor-ramo: #ec4899; --cor-ramo-texto: #be185d; }
+[data-cor="5"] { --cor-ramo: #0d0d0d; --cor-ramo-texto: #0d0d0d; }
+@media (max-width: 860px) {
+  .fase-colunas { grid-template-columns: 1fr; }
+  .mapa { display: flex; flex-direction: column; align-items: stretch; gap: .9rem; }
+  .mapa-centro { order: -1; }
+  .mapa-lado { display: contents; }
+  .mapa-ramo { margin-left: 1rem; position: relative; }
+  .mapa-ramo::before { content: ""; position: absolute; left: -1rem; top: -1rem; bottom: 50%; width: .8rem; border-left: 2px solid var(--borda); border-bottom: 2px solid var(--borda); border-bottom-left-radius: 8px; }
+}
+
 /* ---------- Animações (inspiradas nos componentes do 21st.dev) ---------- */
 
 /* Spotlight Card: brilho verde que segue o mouse (a posição vem do JS em --mx / --my) */
