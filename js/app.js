@@ -182,11 +182,22 @@
       S.revisao = null; S.prova = null; S.provaAdmin = null;
     }
     S.dados = dadosDoCurso(c);
+    try { localStorage.setItem("academy-ultimo-curso", c.id); } catch (e) {}
     return true;
   }
 
+  // Curso usado pelos links do menu: o aberto, senão o último visitado, senão o primeiro com aulas.
+  function cursoDoMenu() {
+    if (CURSO) return CURSO;
+    let ultimo = null;
+    try { ultimo = localStorage.getItem("academy-ultimo-curso"); } catch (e) {}
+    return CURSOS.find(function (c) { return c.id === ultimo; }) ||
+      CURSOS.find(function (c) { return c.aulas.some(function (a) { return a.disponivel; }); }) ||
+      CURSOS[0];
+  }
+
   // Endereço dentro do curso aberto, ex.: rota("aula/1/revisao") -> "#/c/adriano-ia-trafego/aula/1/revisao"
-  function rota(caminho) { return "#/c/" + CURSO.id + (caminho ? "/" + caminho : ""); }
+  function rota(caminho) { return "#/c/" + (CURSO || cursoDoMenu()).id + (caminho ? "/" + caminho : ""); }
 
   // ---------- ofensiva (estilo Duolingo) ----------
   // Um dia conta quando a pessoa revisa pelo menos REGRAS.metaDiaria flashcards, de qualquer aula ou curso.
@@ -291,7 +302,7 @@
       '<a href="#/" class="marca">' + marca("escuro") + "</a>" +
       '<nav class="menu">' +
       '<a href="#/">Mentorias</a>' +
-      (S.noCurso
+      (cursoDoMenu()
         ? '<a href="' + rota("") + '">Aulas</a>' +
           '<a href="' + rota("ranking") + '">Ranking</a>' +
           '<a href="' + rota("certificado") + '">Certificado</a>' +
