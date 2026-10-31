@@ -386,6 +386,60 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .beam::before, .spot::after { display: none !important; }
 }
 
+/* ---------- Temporada (competição de 90 dias) ---------- */
+.menu-temporada { color: #fff !important; font-weight: 700 !important; }
+.banner-temporada {
+  display: flex; align-items: center; gap: .9rem; background: #fff; border-radius: var(--raio); box-shadow: var(--sombra);
+  padding: .9rem 1.2rem; margin-bottom: 1.5rem; text-decoration: none; color: var(--texto); border-left: 5px solid var(--verde);
+}
+.bt-icone { font-size: 1.8rem; line-height: 1; }
+.bt-texto { flex: 1; font-size: .95rem; }
+.bt-ir { font-weight: 700; color: var(--verde-escuro); white-space: nowrap; }
+.hero-temporada { background: radial-gradient(circle at 85% 15%, rgba(0, 202, 158, .35), transparent 50%), var(--preto); }
+.hero-temporada > div:first-child { flex: 1; min-width: 0; }
+.barra-temporada { margin-top: 1rem; max-width: 30rem; background: rgba(255, 255, 255, .15); }
+.temporada-grade { display: grid; grid-template-columns: 1fr 1.6fr; gap: 1rem; margin-bottom: 1rem; align-items: start; }
+.temporada-grade > .painel { margin: 0; min-width: 0; }
+.nivel { display: flex; gap: .9rem; align-items: center; background: var(--fundo); border-radius: 12px; padding: .9rem 1rem; }
+.nivel > div { flex: 1; display: grid; gap: .25rem; }
+.nivel-icone { font-size: 2.2rem; line-height: 1; }
+.nivel b { font-family: var(--fonte-titulo); font-size: 1.2rem; }
+.nivel span { font-size: .82rem; color: var(--muted); }
+.xp-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: .45rem; }
+.xp-lista li { display: flex; justify-content: space-between; gap: .5rem; font-size: .92rem; border-bottom: 1px dashed var(--borda); padding-bottom: .4rem; }
+.xp-lista b { color: var(--verde-escuro); font-family: var(--fonte-titulo); }
+.selos { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: .6rem; }
+.selo { border: 1px dashed var(--borda); border-radius: 12px; padding: .8rem .5rem; text-align: center; display: grid; gap: .15rem; justify-items: center; opacity: .45; filter: grayscale(1); }
+.selo i { font-style: normal; font-size: 1.7rem; line-height: 1.2; }
+.selo b { font-size: .82rem; }
+.selo span { font-size: .7rem; color: var(--muted); }
+.selo.ganho { opacity: 1; filter: none; border-style: solid; border-color: #b9e8e2; background: var(--verde-claro); }
+.semana-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
+.semana-lista li { display: flex; justify-content: space-between; background: var(--fundo); border-radius: 10px; padding: .6rem .8rem; }
+.semana-lista li.voce { outline: 2px solid var(--verde); }
+.premios { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.premio { background: #fff; border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .4rem; }
+.premio-principal { grid-column: 1 / -1; background: radial-gradient(circle at 90% 10%, rgba(0, 202, 158, .18), transparent 55%), #fff; }
+.premio.premio-principal ul { display: flex; flex-wrap: wrap; gap: .4rem 2rem; font-size: .95rem; }
+.premio-topo { display: flex; gap: .7rem; align-items: center; }
+.premio-topo div { display: grid; }
+.premio-topo b { font-family: var(--fonte-titulo); font-size: 1.05rem; }
+.premio-topo span { font-size: .78rem; color: var(--muted); }
+.premio-icone { font-size: 2rem; line-height: 1; }
+.premio-principal .premio-icone { font-size: 2.6rem; }
+.premio-escolha { margin: .3rem 0 0; font-family: var(--fonte-rotulo); font-size: .75rem; color: var(--verde-escuro); text-transform: lowercase; }
+.premio ul { margin: 0; padding-left: 1.1rem; font-size: .88rem; display: grid; gap: .15rem; }
+.premio-lider { margin: auto 0 0; padding-top: .5rem; font-size: .85rem; color: var(--muted); border-top: 1px dashed var(--borda); }
+.premio-lider b { color: var(--texto); }
+.regras-lista { margin: 1rem 0 0; padding-left: 1.2rem; display: grid; gap: .35rem; font-size: .9rem; }
+.tarefa-relato { margin-top: .6rem !important; font-size: .9rem !important; }
+.tarefa-relato-feito { margin-top: .5rem !important; font-style: italic; color: #1f3532; }
+@media (max-width: 760px) {
+  .temporada-grade { grid-template-columns: 1fr; }
+  .banner-temporada { flex-wrap: wrap; }
+  .bt-ir { width: 100%; }
+}
+
 /* ---------- Animações (inspiradas nos componentes do 21st.dev) ---------- */
 
 /* Spotlight Card: brilho verde que segue o mouse (a posição vem do JS em --mx / --my) */
