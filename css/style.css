@@ -383,4 +383,84 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .conteudo { padding: 0; max-width: none; }
   .certificado { box-shadow: none; margin: 0; max-width: none; width: 100vw; height: 100vh; aspect-ratio: auto; padding: 8mm; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .beam::before, .spot::after { display: none !important; }
+}
+
+/* ---------- Animações (inspiradas nos componentes do 21st.dev) ---------- */
+
+/* Spotlight Card: brilho verde que segue o mouse (a posição vem do JS em --mx / --my) */
+.spot { position: relative; }
+.spot::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .3s;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(0, 202, 158, .13), transparent 60%);
+}
+@media (hover: hover) { .spot:hover::after { opacity: 1; } }
+
+/* Border Beam: feixe de luz que percorre a borda (aula aprovada, 1º lugar, certificado) */
+@property --beam-ang { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+.beam { position: relative; }
+.beam::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px; pointer-events: none;
+  background: conic-gradient(from var(--beam-ang), transparent 0 58%, rgba(0, 202, 158, .3) 74%, var(--verde) 92%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+
+/* Shimmer Button: faixa de luz que atravessa o botão verde */
+.btn-primario { position: relative; overflow: hidden; isolation: isolate; }
+.btn-primario::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 45%; pointer-events: none; z-index: -1;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55), transparent); transform: skewX(-18deg);
+}
+
+/* Fogo da ofensiva */
+.fogo { display: inline-block; transform-origin: 50% 85%; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .beam::before { animation: beam-girar 5s linear infinite; }
+  @keyframes beam-girar { to { --beam-ang: 360deg; } }
+
+  .btn-primario:hover:not(:disabled)::after { animation: shimmer .8s ease; }
+  .btn-primario.brilho:not(:disabled)::after { animation: shimmer 1.1s ease 1.2s, shimmer 1.1s ease 6s infinite; }
+  @keyframes shimmer { from { left: -60%; } to { left: 120%; } }
+  .btn { transition: background .15s, border-color .15s, color .15s, transform .15s, box-shadow .15s; }
+  .btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn:active:not(:disabled), .nota-btn:active { transform: scale(.97); }
+
+  /* Entrada da tela: os blocos sobem e aparecem em sequência */
+  .entrar .hero, .entrar .ofensiva, .entrar .painel, .entrar .metodo, .entrar .podio-lugar,
+  .entrar .grade-cursos > *, .entrar .grade-aulas > *, .entrar .aula-cabeca, .entrar .certificado {
+    animation: subir .5s cubic-bezier(.2, .7, .2, 1) both;
+  }
+  .entrar .grade-cursos > :nth-child(2), .entrar .grade-aulas > :nth-child(2), .entrar .podio-lugar:nth-child(2) { animation-delay: .06s; }
+  .entrar .grade-cursos > :nth-child(3), .entrar .grade-aulas > :nth-child(3), .entrar .podio-lugar:nth-child(3) { animation-delay: .12s; }
+  .entrar .grade-aulas > :nth-child(4) { animation-delay: .18s; }
+  .entrar .grade-aulas > :nth-child(5) { animation-delay: .24s; }
+  .entrar .grade-aulas > :nth-child(n+6) { animation-delay: .3s; }
+  @keyframes subir { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+  /* Barras de progresso enchendo */
+  .barra span.encher { transition: width .9s cubic-bezier(.2, .7, .2, 1); }
+
+  /* Flashcards: pergunta nova entra deslizando, resposta aparece ao virar */
+  .flashcard:not(.virado) { animation: card-entrar .35s cubic-bezier(.2, .7, .2, 1); }
+  @keyframes card-entrar { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+  .flashcard.virado .fc-divisor, .flashcard.virado .fc-divisor ~ * { animation: resposta .4s ease both; }
+  @keyframes resposta { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .notas .nota-btn { animation: subir .35s ease both; transition: transform .15s, background .15s, box-shadow .15s; }
+  .notas .nota-btn:nth-child(2) { animation-delay: .04s; }
+  .notas .nota-btn:nth-child(3) { animation-delay: .08s; }
+  .notas .nota-btn:nth-child(4) { animation-delay: .12s; }
+  .nota-btn:hover { transform: translateY(-2px); box-shadow: var(--sombra); }
+
+  /* Resultado da prova aparece com um “pop” */
+  .resultado b { animation: pop .5s cubic-bezier(.3, 1.6, .5, 1) both; }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* Fogo tremulando quando a ofensiva está acesa */
+  .acesa .fogo, .ofensiva-fogo.acesa { animation: fogo 1.6s ease-in-out infinite; }
+  @keyframes fogo {
+    0%, 100% { transform: rotate(-4deg) scale(1); }
+    50% { transform: rotate(4deg) scale(1.1); }
+  }
 }
