@@ -36,7 +36,7 @@
         { numero: 1, titulo: "Contexto, cérebros e APIs", disponivel: true },
         { numero: 2, titulo: "Sistema no ar, loops e a primeira skill", disponivel: true },
         { numero: 3, titulo: "Prompt CTR, skills e o primeiro agente", disponivel: true },
-        { numero: 4, titulo: "Aula 4", disponivel: false },
+        { numero: 4, titulo: "Prioridades, processo e skills de persona e anúncios", disponivel: true },
         { numero: 5, titulo: "Aula 5", disponivel: false },
         { numero: 6, titulo: "Aula 6", disponivel: false }
       ]
