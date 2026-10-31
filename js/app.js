@@ -229,7 +229,7 @@
       return '<span class="dia' + (d.feito ? " feito" : "") + (d.hoje ? " hoje" : "") + '"><i>' + (d.feito ? "🔥" : "") + "</i>" + letras[d.data.getDay()] + "</span>";
     }).join("");
     return '<section class="ofensiva">' +
-      '<div class="ofensiva-numero"><span class="ofensiva-fogo">🔥</span><div><b>' + o.dias + "</b><span>" + (o.dias === 1 ? "dia" : "dias") + " de ofensiva</span></div></div>" +
+      '<div class="ofensiva-numero"><span class="ofensiva-fogo' + (o.dias > 0 ? " acesa" : "") + '">🔥</span><div><b>' + o.dias + "</b><span>" + (o.dias === 1 ? "dia" : "dias") + " de ofensiva</span></div></div>" +
       '<div class="ofensiva-semana">' + bolinhas + "</div>" +
       '<p class="ofensiva-meta">' + (o.batidaHoje
         ? "Meta de hoje batida: <b>" + o.hoje + " flashcards</b> revisados. Volte amanhã para manter a ofensiva."
@@ -297,6 +297,7 @@
 
   function layout(conteudo) {
     const nome = (S.perfil && S.perfil.nome) || (S.session && S.session.user.email) || "";
+    const ofensiva = S.bruto ? calcularOfensiva().dias : 0;
     app.innerHTML =
       '<header class="topo"><div class="topo-in">' +
       '<a href="#/" class="marca">' + marca("escuro") + "</a>" +
@@ -309,10 +310,70 @@
           (S.perfil && S.perfil.is_admin ? '<a href="' + rota("equipe") + '">Equipe</a>' : "")
         : "") +
       '<a href="#/como-funciona">Como funciona</a>' +
-      (S.bruto ? '<a href="#/" class="ofensiva-chip" title="Ofensiva: dias seguidos estudando">🔥 ' + calcularOfensiva().dias + "</a>" : "") +
+      (S.bruto ? '<a href="#/" class="ofensiva-chip' + (ofensiva > 0 ? " acesa" : "") + '" title="Ofensiva: dias seguidos estudando"><span class="fogo">🔥</span> ' + ofensiva + "</a>" : "") +
       '<a href="#/perfil" class="menu-perfil">' + esc(nome.split(" ")[0]) + "</a>" +
       "</nav></div></header>" +
       '<main class="conteudo">' + conteudo + "</main>";
+    efeitos();
+  }
+
+  // ---------- animações (inspiradas nos componentes do 21st.dev) ----------
+  // Spotlight Card, Border Beam, Shimmer Button, contador de números e confete.
+  // Contador, barras e entrada só rodam quando a tela muda, não a cada clique dentro dela.
+  function efeitos() {
+    const main = app.querySelector(".conteudo");
+    const telaNova = S.ultimaTela !== location.hash;
+    S.ultimaTela = location.hash;
+    const calmo = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    app.querySelectorAll(".curso-card, .aula-card:not(.bloqueada), .podio-lugar").forEach(function (el) {
+      el.classList.add("spot");
+      el.addEventListener("pointermove", function (ev) {
+        const r = el.getBoundingClientRect();
+        el.style.setProperty("--mx", (ev.clientX - r.left) + "px");
+        el.style.setProperty("--my", (ev.clientY - r.top) + "px");
+      });
+    });
+    app.querySelectorAll(".aula-card, .podio-lugar.lugar-1, .certificado").forEach(function (el) {
+      if (!el.classList.contains("aula-card") || el.querySelector(".chip-ok")) el.classList.add("beam");
+    });
+    const cta = main.querySelector(".btn-primario");
+    if (cta) cta.classList.add("brilho");
+
+    const festa = main.querySelector("[data-festa]");
+    if (festa && !calmo) confete();
+    if (!telaNova || calmo) return;
+
+    main.classList.add("entrar");
+    main.querySelectorAll(".hero-stats b, .stats-revisao b, .aula-nota b, .aula-cabeca-nota b, .ofensiva-numero b, .podio-nota, .resultado b").forEach(contar);
+    const barras = main.querySelectorAll(".barra span");
+    barras.forEach(function (s) { s.dataset.w = s.style.width; s.style.width = "0"; });
+    setTimeout(function () {
+      barras.forEach(function (s) { s.classList.add("encher"); s.style.width = s.dataset.w; });
+    }, 30);
+  }
+
+  // Number Ticker: o número do começo do texto sobe de 0 até o valor (ex.: "2/6" anima o 2).
+  function contar(el) {
+    const m = el.textContent.match(/^(\d+)(.*)$/);
+    if (!m || +m[1] === 0) return;
+    const alvo = +m[1], resto = m[2], inicio = performance.now(), dur = 700;
+    (function passo(t) {
+      const k = Math.min(1, (t - inicio) / dur);
+      el.textContent = Math.round(alvo * (1 - Math.pow(1 - k, 3))) + resto;
+      if (k < 1) requestAnimationFrame(passo);
+    })(inicio);
+  }
+
+  // Confetti: mesma biblioteca (canvas-confetti) do componente do 21st.dev, nas cores da Keep Ads.
+  function confete() {
+    if (!window.confetti) return;
+    const cores = ["#00ca9e", "#0d0d0d", "#ffffff", "#f5a524"];
+    window.confetti({ particleCount: 90, spread: 75, origin: { y: .65 }, colors: cores });
+    setTimeout(function () {
+      window.confetti({ particleCount: 50, angle: 60, spread: 60, origin: { x: 0, y: .7 }, colors: cores });
+      window.confetti({ particleCount: 50, angle: 120, spread: 60, origin: { x: 1, y: .7 }, colors: cores });
+    }, 250);
   }
 
   function barra(pct, classe) {
@@ -598,7 +659,9 @@
     const rv = S.revisao;
     if (rv && rv.fim) {
       const prox = proximaRevisao(n);
-      return '<div class="painel centro"><h2>Sessão concluída!</h2>' +
+      const festa = rv.feitos > 0 && !rv.festejado;
+      rv.festejado = true;
+      return '<div class="painel centro"' + (festa ? " data-festa" : "") + "><h2>Sessão concluída!</h2>" +
         "<p>Você revisou <b>" + rv.feitos + "</b> card(s)" + (rv.livre ? " no modo livre" : "") + ".</p>" +
         (prox && !rv.livre ? '<p class="muted">Próxima revisão: <b>' + dataBR(prox) + "</b>. Volte nesse dia para manter a memória.</p>" : "") +
         '<div class="linha-botoes"><button class="btn btn-secundario" id="rv-sair">Voltar ao resumo</button></div></div>';
@@ -806,7 +869,9 @@
           '<div class="corr-exp">' + esc(q.explicacao) + "</div></li>";
       }).join("");
       const ok = p.resultado.nota >= CURSO.notaMinima;
-      return '<div class="painel"><div class="resultado ' + (ok ? "ok" : "baixo") + '"><b>' + Math.round(p.resultado.nota) + "</b><span>" +
+      const festa = ok && !p.festejado;
+      p.festejado = true;
+      return '<div class="painel"' + (festa ? " data-festa" : "") + '><div class="resultado ' + (ok ? "ok" : "baixo") + '"><b>' + Math.round(p.resultado.nota) + "</b><span>" +
         p.resultado.acertos + " de " + p.resultado.total + " acertos</span><p>" +
         (ok ? "Mandou bem! Revise as que errou abaixo." : "Ainda abaixo de " + CURSO.notaMinima + ". Revise as explicações e os flashcards e tente de novo.") + "</p></div>" +
         '<ol class="correcao">' + lista + "</ol>" +
@@ -1014,7 +1079,7 @@
       layout(
         '<div class="sem-imprimir linha-botoes"><a href="' + rota("") + '" class="voltar">← Voltar</a><button class="btn btn-primario" onclick="window.print()">Imprimir / salvar em PDF</button></div>' +
         (completo ? "" : '<div class="aviso sem-imprimir">Modelo de visualização (somente administradores). O certificado real só libera com as 6 aulas aprovadas.</div>') +
-        '<article class="certificado"><div class="cert-borda">' +
+        '<article class="certificado"' + (completo ? " data-festa" : "") + '><div class="cert-borda">' +
         '<div class="cert-marca">' + marca("claro") + "</div>" +
         '<p class="cert-kicker">Certificado de conclusão</p>' +
         "<p>Certificamos que</p><h1>" + esc(nome) + "</h1>" +
