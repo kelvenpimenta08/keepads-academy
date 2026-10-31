@@ -303,6 +303,7 @@
       '<a href="#/" class="marca">' + marca("escuro") + "</a>" +
       '<nav class="menu">' +
       '<a href="#/">Mentorias</a>' +
+      (TEMPORADAS.length ? '<a href="#/temporada" class="menu-temporada">🏆 Temporada</a>' : "") +
       (cursoDoMenu()
         ? '<a href="' + rota("") + '">Aulas</a>' +
           '<a href="' + rota("ranking") + '">Ranking</a>' +
@@ -326,7 +327,7 @@
     S.ultimaTela = location.hash;
     const calmo = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    app.querySelectorAll(".curso-card, .aula-card:not(.bloqueada), .podio-lugar").forEach(function (el) {
+    app.querySelectorAll(".curso-card, .aula-card:not(.bloqueada), .podio-lugar, .premio, .banner-temporada").forEach(function (el) {
       el.classList.add("spot");
       el.addEventListener("pointermove", function (ev) {
         const r = el.getBoundingClientRect();
@@ -334,7 +335,7 @@
         el.style.setProperty("--my", (ev.clientY - r.top) + "px");
       });
     });
-    app.querySelectorAll(".aula-card, .podio-lugar.lugar-1, .certificado").forEach(function (el) {
+    app.querySelectorAll(".aula-card, .podio-lugar.lugar-1, .certificado, .premio-principal").forEach(function (el) {
       if (!el.classList.contains("aula-card") || el.querySelector(".chip-ok")) el.classList.add("beam");
     });
     const cta = main.querySelector(".btn-primario");
@@ -532,6 +533,7 @@
       '<p class="hero-kicker">keep ads academy</p>' +
       "<h1>Olá" + (primeiroNome ? ", " + esc(primeiroNome) : "") + "! Qual mentoria você vai estudar hoje?</h1>" +
       "<p>Escolha a mentoria ou o curso para ver as aulas, revisar os flashcards, executar as práticas e fazer as provas.</p></div></section>" +
+      bannerTemporada() +
       blocoOfensiva() +
       '<section class="grade-cursos">' + cards + "</section>"
     );
@@ -738,7 +740,7 @@
     }
     // Toda revisão conta para a ofensiva, inclusive a revisão livre (que não mexe na agenda do card)
     const antes = calcularOfensiva();
-    sb.from(T.log).insert({ user_id: S.session.user.id, curso: CURSO.id, card_id: id, aula: n, nota: nota }).then(function () {});
+    sb.from(T.log).insert({ user_id: S.session.user.id, curso: CURSO.id, card_id: id, aula: n, nota: nota, livre: !!rv.livre }).then(function () {});
     const registro = { curso: CURSO.id, aula: n, reviewed_at: new Date().toISOString() };
     S.dados.log.push(registro);
     S.bruto.log.push(registro);
@@ -782,10 +784,14 @@
     const itens = aula.pratica.map(function (t, i) {
       const c = S.dados.checks[n + ":" + t.id];
       const feito = !!(c && c.done);
+      // Para marcar, a pessoa escreve em uma linha o que fez (vale XP na temporada e o admin consegue conferir)
       return '<li class="tarefa' + (feito ? " feita" : "") + '">' +
-        '<label class="tarefa-check"><input type="checkbox" data-tarefa="' + t.id + '"' + (feito ? " checked" : "") + "><span>Executei</span></label>" +
+        '<label class="tarefa-check"><input type="checkbox" data-tarefa="' + t.id + '"' + (feito ? " checked" : " disabled") + "><span>Executei</span></label>" +
         '<div class="tarefa-texto"><div class="tarefa-num">Prática ' + (i + 1) + "</div><h3>" + esc(t.titulo) + "</h3><p>" + esc(t.descricao) + "</p>" +
-        (feito && c.done_at ? '<p class="muted pequeno">Marcado em ' + dataBR(c.done_at) + "</p>" : "") +
+        (feito
+          ? (c.relato ? '<p class="tarefa-relato-feito">“' + esc(c.relato) + "”</p>" : "") +
+            (c.done_at ? '<p class="muted pequeno">Marcado em ' + dataBR(c.done_at) + "</p>" : "")
+          : '<input class="tarefa-relato" data-relato="' + t.id + '" maxlength="200" placeholder="Em uma linha: o que você fez? (libera o “Executei”)">') +
         "</div></li>";
     }).join("");
     const todas = r.feitas === r.totalTarefas;
@@ -798,12 +804,18 @@
   }
 
   function ligarPratica(n) {
+    document.querySelectorAll("[data-relato]").forEach(function (inp) {
+      const cb = document.querySelector('[data-tarefa="' + inp.dataset.relato + '"]');
+      inp.oninput = function () { cb.disabled = inp.value.trim().length < 10; };
+    });
     document.querySelectorAll("[data-tarefa]").forEach(function (cb) {
       cb.onchange = async function () {
+        const inp = document.querySelector('[data-relato="' + cb.dataset.tarefa + '"]');
         cb.disabled = true;
         const linha = {
           user_id: S.session.user.id, curso: CURSO.id, aula: n, task_id: cb.dataset.tarefa,
-          done: cb.checked, done_at: cb.checked ? new Date().toISOString() : null
+          done: cb.checked, done_at: cb.checked ? new Date().toISOString() : null,
+          relato: cb.checked && inp ? inp.value.trim() : null
         };
         const r = await sb.from(T.praticas).upsert(linha);
         if (r.error) { cb.checked = !cb.checked; cb.disabled = false; toast("Não consegui salvar: " + traduzErro(r.error), "erro"); return; }
@@ -1111,6 +1123,195 @@
 
   // ---------- ranking da mentoria ----------
 
+  // ---------- temporada (competição de 90 dias) ----------
+
+  const TEMPORADAS = window.TEMPORADAS || [];
+  const PONTOS = window.TEMPORADA_PONTOS || {};
+  const NIVEIS = window.TEMPORADA_NIVEIS || [{ nome: "Bronze", xp: 0, icone: "🥉" }];
+
+  function dataLocal(iso) { const p = iso.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+  function hojeLocal() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+
+  // A temporada em andamento, ou a próxima, ou a última que terminou
+  function temporadaAtual() {
+    const hoje = hojeLocal();
+    return TEMPORADAS.find(function (t) { return dataLocal(t.fim) >= hoje; }) || TEMPORADAS[TEMPORADAS.length - 1] || null;
+  }
+
+  function situacaoTemporada(t) {
+    const hoje = hojeLocal(), ini = dataLocal(t.inicio), fim = dataLocal(t.fim);
+    const total = Math.round((fim - ini) / DIA) + 1;
+    if (hoje < ini) return { fase: "antes", dias: Math.round((ini - hoje) / DIA), total: total, pct: 0 };
+    if (hoje > fim) return { fase: "fim", dias: 0, total: total, pct: 100 };
+    const passados = Math.round((hoje - ini) / DIA) + 1;
+    return { fase: "andamento", dias: total - passados, dia: passados, total: total, pct: passados / total * 100 };
+  }
+
+  function nivelDe(xp) {
+    let atual = NIVEIS[0], prox = null;
+    NIVEIS.forEach(function (nv, i) { if (xp >= nv.xp) { atual = nv; prox = NIVEIS[i + 1] || null; } });
+    return { atual: atual, prox: prox, pct: prox ? (xp - atual.xp) / (prox.xp - atual.xp) * 100 : 100 };
+  }
+
+  function selosDe(l, aulasTotal) {
+    return [
+      { icone: "👣", nome: "Primeiro passo", desc: "Revisar o primeiro flashcard", ok: l.revisoes >= 1 },
+      { icone: "📝", nome: "Primeira prova", desc: "Fazer a primeira prova", ok: l.provas_feitas >= 1 },
+      { icone: "🔥", nome: "7 dias de fogo", desc: "7 dias seguidos batendo a meta", ok: l.ofensiva_max >= 7 },
+      { icone: "☄️", nome: "Mês em chamas", desc: "30 dias seguidos batendo a meta", ok: l.ofensiva_max >= 30 },
+      { icone: "🎯", nome: "Gabaritou", desc: "Tirar 100 em uma prova", ok: Number(l.max_nota) >= 100 },
+      { icone: "🧠", nome: "Memória de elefante", desc: "50 cards dominados", ok: l.dominados >= 50 },
+      { icone: "🛠️", nome: "Mão na massa", desc: "9 partes práticas executadas", ok: l.praticas >= 9 },
+      { icone: "🏃", nome: "Maratonista", desc: "500 flashcards revisados", ok: l.revisoes >= 500 },
+      { icone: "✅", nome: "Aula aprovada", desc: "Ser aprovado em uma aula", ok: l.aulas_aprovadas >= 1 },
+      { icone: "🎓", nome: "Mentoria em dia", desc: "Aprovado em todas as aulas liberadas", ok: aulasTotal > 0 && l.aulas_aprovadas >= aulasTotal }
+    ];
+  }
+
+  // Faixa da temporada na tela de mentorias
+  function bannerTemporada() {
+    const t = temporadaAtual();
+    if (!t) return "";
+    const s = situacaoTemporada(t);
+    const c = CURSOS.find(function (x) { return x.id === t.curso; });
+    const premio = t.premios.reduce(function (soma, p) { return soma + (p.valor || 0); }, 0);
+    const quando = s.fase === "antes" ? "começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>"
+      : s.fase === "andamento" ? "faltam <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>" : "encerrada";
+    return '<a class="banner-temporada" href="#/temporada"><span class="bt-icone">🏆</span><span class="bt-texto"><b>' + esc(t.nome) + "</b> · " +
+      esc(c ? c.titulo : "") + " · " + quando + (premio ? " · R$ " + premio.toLocaleString("pt-BR") + " em prêmios" : "") +
+      '</span><span class="bt-ir">Ver placar →</span></a>';
+  }
+
+  async function telaTemporada() {
+    const t = temporadaAtual();
+    if (!t) { layout('<div class="painel"><h2>Temporada</h2><p>Nenhuma temporada cadastrada ainda.</p></div>'); return; }
+    const curso = CURSOS.find(function (x) { return x.id === t.curso; });
+    const aulasCurso = TODAS_AULAS[curso.id] || {};
+    const praticas = {};
+    aulasDisponiveis(curso).forEach(function (a) { if (aulasCurso[a.numero]) praticas[a.numero] = aulasCurso[a.numero].pratica.length; });
+    const aulasTotal = Object.keys(praticas).length;
+    const s = situacaoTemporada(t);
+
+    layout('<div class="painel centro"><p>Carregando a temporada…</p></div>');
+    const r = await sb.rpc("academy_temporada", {
+      p_curso: curso.id, p_inicio: t.inicio, p_fim: t.fim, p_versao: curso.versaoProvas,
+      p_regras: Object.assign({}, PONTOS, { metaDiaria: REGRAS.metaDiaria, notaMinima: curso.notaMinima, pesos: curso.pesos }),
+      p_praticas: praticas
+    });
+    if (r.error) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(r.error)) + "</p></div>"); return; }
+
+    const eu = S.session.user.id;
+    const linhas = (r.data || []).map(function (l) {
+      return Object.assign({}, l, { xp: Number(l.xp_total) || 0, semana: Number(l.xp_semana) || 0, reta: Number(l.xp_reta_final) || 0,
+        concorre: t.adminsConcorrem || !l.is_admin });
+    }).sort(function (a, b) { return b.xp - a.xp || (Number(b.media_provas) || 0) - (Number(a.media_provas) || 0) || String(a.nome).localeCompare(b.nome); });
+    const concorrentes = linhas.filter(function (l) { return l.concorre; });
+    concorrentes.forEach(function (l, i) { l.pos = i + 1; });
+    const meu = linhas.find(function (l) { return l.user_id === eu; });
+
+    // Quem lidera cada prêmio agora (Maior evolução e Ofensiva excluem os 3 primeiros)
+    const top3 = concorrentes.slice(0, 3).map(function (l) { return l.user_id; });
+    const resto = concorrentes.filter(function (l) { return top3.indexOf(l.user_id) < 0; });
+    const lider = {
+      campeao: concorrentes[0], segundo: concorrentes[1], terceiro: concorrentes[2],
+      evolucao: resto.slice().sort(function (a, b) { return b.reta - a.reta; })[0],
+      ofensiva: resto.slice().sort(function (a, b) { return b.ofensiva_max - a.ofensiva_max; })[0]
+    };
+    const pontuou = function (l, id) {
+      if (!l) return false;
+      if (id === "evolucao") return l.reta > 0;
+      if (id === "ofensiva") return l.ofensiva_max > 0;
+      return l.xp > 0;
+    };
+
+    const quando = s.fase === "antes" ? "Começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b> · " + dataBR(dataLocal(t.inicio))
+      : s.fase === "andamento" ? "Dia <b>" + s.dia + "</b> de " + s.total + " · faltam <b>" + s.dias + "</b> dias"
+      : "Temporada encerrada em " + dataBR(dataLocal(t.fim));
+    const hero = '<section class="hero hero-temporada"><div>' +
+      '<p class="hero-kicker">' + esc(t.nome.toLowerCase()) + " · " + esc((curso.mentor || "").toLowerCase()) + "</p>" +
+      "<h1>" + esc(curso.titulo) + "</h1>" +
+      "<p>" + quando + " · de " + dataBR(dataLocal(t.inicio)) + " a " + dataBR(dataLocal(t.fim)) + "</p>" +
+      barra(s.pct, "barra-temporada") + "</div>" +
+      (meu ? (function () {
+        const nv = nivelDe(meu.xp);
+        return '<div class="hero-stats"><div><b>' + (meu.concorre ? meu.pos + "º" : "—") + "</b><span>" + (meu.concorre ? "sua posição" : "organizador") + "</span></div>" +
+          "<div><b>" + meu.xp + "</b><span>XP na temporada</span></div>" +
+          "<div><b>" + nv.atual.icone + "</b><span>" + esc(nv.atual.nome) + "</span></div></div>";
+      })() : "") +
+      "</section>";
+
+    const meuBloco = meu ? (function () {
+      const nv = nivelDe(meu.xp);
+      const partes = [
+        ["Flashcards", meu.xp_revisao, meu.revisoes + " revisados"],
+        ["Meta do dia", meu.xp_meta, meu.dias_meta + " dias"],
+        ["Bônus de ofensiva", meu.xp_ofensiva, "recorde: " + meu.ofensiva_max + " dias"],
+        ["Cards dominados", meu.xp_dominados, meu.dominados + " cards"],
+        ["Partes práticas", meu.xp_praticas, meu.praticas + " executadas"],
+        ["Provas", meu.xp_provas, meu.provas_feitas + " feitas" + (meu.media_provas !== null ? " · média " + meu.media_provas : "")],
+        ["Aulas aprovadas", meu.xp_aulas, meu.aulas_aprovadas + " aulas"]
+      ].map(function (p) {
+        return "<li><span>" + p[0] + ' <small class="muted">' + p[2] + "</small></span><b>+" + Math.round(Number(p[1]) || 0) + "</b></li>";
+      }).join("");
+      const selos = selosDe(meu, aulasTotal).map(function (x) {
+        return '<div class="selo' + (x.ok ? " ganho" : "") + '" title="' + esc(x.desc) + '"><i>' + x.icone + "</i><b>" + esc(x.nome) + "</b><span>" + esc(x.desc) + "</span></div>";
+      }).join("");
+      return '<div class="temporada-grade">' +
+        '<section class="painel"><h2>Meu XP</h2>' +
+        '<div class="nivel"><span class="nivel-icone">' + nv.atual.icone + "</span><div><b>" + esc(nv.atual.nome) + "</b>" +
+        (nv.prox ? "<span>" + (nv.prox.xp - meu.xp) + " XP para " + esc(nv.prox.nome) + " " + nv.prox.icone + "</span>" : "<span>Nível máximo</span>") +
+        barra(nv.pct) + "</div></div>" +
+        '<ul class="xp-lista">' + partes + "</ul>" +
+        '<p class="muted pequeno">Nesta semana: <b>' + meu.semana + " XP</b></p></section>" +
+        '<section class="painel"><h2>Meus selos</h2><div class="selos">' + selos + "</div></section></div>";
+    })() : "";
+
+    const semana = concorrentes.slice().sort(function (a, b) { return b.semana - a.semana; }).filter(function (l) { return l.semana > 0; }).slice(0, 3);
+    const blocoSemana = '<section class="painel"><h2>⚡ Destaque da semana</h2>' +
+      '<p class="muted">O placar da semana zera toda segunda. Quem fizer mais XP de segunda a domingo ganha o selo de destaque.</p>' +
+      (semana.length ? '<ol class="semana-lista">' + semana.map(function (l, i) {
+        return "<li" + (l.user_id === eu ? ' class="voce"' : "") + "><span>" + ["🥇", "🥈", "🥉"][i] + " " + esc(l.nome || "Sem nome") + "</span><b>" + l.semana + " XP</b></li>";
+      }).join("") + "</ol>" : '<p class="muted">Ninguém pontuou nesta semana ainda. Saia na frente.</p>') + "</section>";
+
+    const premios = t.premios.length ? '<section class="premios">' + t.premios.map(function (p) {
+      const l = lider[p.id];
+      return '<article class="premio' + (p.id === "campeao" ? " premio-principal" : "") + '"><div class="premio-topo"><span class="premio-icone">' + p.icone + "</span>" +
+        "<div><b>" + esc(p.titulo) + "</b><span>" + esc(p.regra) + "</span></div></div>" +
+        '<p class="premio-escolha">O ganhador escolhe um:</p><ul>' + p.opcoes.map(function (o) { return "<li>" + esc(o) + "</li>"; }).join("") + "</ul>" +
+        '<p class="premio-lider">' + (s.fase === "antes" ? "Começa a valer em " + dataBR(dataLocal(t.inicio))
+          : p.id === "evolucao" && s.fase === "andamento" && s.dias >= 30 ? "Conta os últimos 30 dias da temporada"
+          : pontuou(l, p.id) ? (s.fase === "fim" ? "Ganhador: " : "Liderando: ") + "<b>" + esc(l.nome || "Sem nome") + "</b>" : "Ninguém pontuou ainda") + "</p></article>";
+    }).join("") + "</section>" : '<div class="painel"><p class="muted">Os prêmios desta temporada serão anunciados antes do início.</p></div>';
+
+    const tabela = '<section class="painel"><h2>Placar geral</h2><div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr>' +
+      "<th>#</th><th>Nome</th><th>Nível</th><th>XP</th><th>Semana</th><th>Ofensiva</th><th>Provas</th></tr></thead><tbody>" +
+      linhas.map(function (l) {
+        const nv = nivelDe(l.xp);
+        return "<tr" + (l.user_id === eu ? ' class="voce"' : "") + "><td>" + (l.concorre ? l.pos + "º" : "—") + "</td>" +
+          "<td>" + esc(l.nome || "Sem nome") + (l.concorre ? "" : ' <span class="chip chip-cinza">organizador</span>') + "</td>" +
+          "<td>" + nv.atual.icone + " " + esc(nv.atual.nome) + "</td><td><b>" + l.xp + "</b></td><td>" + l.semana + "</td>" +
+          "<td>🔥 " + l.ofensiva_max + "</td><td>" + (l.media_provas !== null ? l.media_provas : "—") + "</td></tr>";
+      }).join("") + "</tbody></table></div></section>";
+
+    const P = PONTOS, of = P.ofensiva || {};
+    const regras = '<section class="painel metodo-temporada"><h2>Como ganhar XP</h2><table class="tabela"><thead><tr><th>Ação</th><th>XP</th><th>Regra</th></tr></thead><tbody>' +
+      "<tr><td>Revisar um flashcard</td><td>" + P.revisao + "</td><td>Até " + P.limiteDia + " XP por dia. A revisão livre vale metade.</td></tr>" +
+      "<tr><td>Bater a meta do dia (" + REGRAS.metaDiaria + " cards)</td><td>+" + P.meta + "</td><td>Uma vez por dia</td></tr>" +
+      "<tr><td>Ofensiva de " + Object.keys(of).join(", ") + " dias</td><td>+" + Object.keys(of).map(function (k) { return of[k]; }).join(", +") + "</td><td>Dias seguidos batendo a meta, dentro da temporada</td></tr>" +
+      "<tr><td>Card dominado</td><td>" + P.dominado + "</td><td>Card que você lembra há 7 dias ou mais</td></tr>" +
+      "<tr><td>Parte prática executada</td><td>" + P.pratica + "</td><td>Com o relato do que fez. O organizador pode conferir.</td></tr>" +
+      "<tr><td>Prova</td><td>nota × " + P.prova + "</td><td>Melhor nota de cada prova feita na temporada (até " + (100 * P.prova) + ")</td></tr>" +
+      "<tr><td>Aula aprovada</td><td>+" + P.aula + "</td><td>Nota " + curso.notaMinima + " ou mais nas provas da aula</td></tr>" +
+      "</tbody></table>" +
+      "<ul class=\"regras-lista\"><li>Vale só o que é feito na mentoria da temporada, entre " + dataBR(dataLocal(t.inicio)) + " e " + dataBR(dataLocal(t.fim)) + ".</li>" +
+      "<li>Empate no placar: ganha quem tiver a maior média nas provas.</li>" +
+      "<li>Quem ganha um dos 3 primeiros lugares não concorre a Maior evolução nem a Ofensiva mais longa.</li>" +
+      (t.adminsConcorrem ? "" : "<li>Os organizadores aparecem no placar, mas não disputam os prêmios.</li>") +
+      "<li>Marcar prática sem ter feito, ou qualquer tentativa de burlar o placar, tira a pessoa da temporada.</li></ul></section>";
+
+    layout(hero + meuBloco + premios + '<div class="temporada-grade">' + blocoSemana + tabela + "</div>" + regras);
+  }
+
   async function telaRanking() {
     layout('<div class="painel centro"><p>Carregando o ranking…</p></div>');
     const r = await sb.rpc("academy_ranking", { p_curso: CURSO.id, p_versao: CURSO.versaoProvas, p_meta: REGRAS.metaDiaria });
@@ -1265,6 +1466,7 @@
       switch (partes[0]) {
         case "": return telaCursos();
         case "como-funciona": return telaComoFunciona();
+        case "temporada": return telaTemporada();
         case "perfil": return telaPerfil();
         default: location.hash = "#/";
       }
