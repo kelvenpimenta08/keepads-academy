@@ -607,12 +607,23 @@
   // ---------- tela da aula ----------
 
   const ABAS = [
+    ["resumo", "Resumo"],
+    ["mapa", "Mapa mental"],
     ["revisao", "Revisão"],
     ["pratica", "Partes práticas"],
     ["teorica", "Prova teórica"],
     ["prova-pratica", "Prova prática"],
     ["nota", "Nota"]
   ];
+
+  // Resumo e mapa mental só aparecem nas aulas que já têm esse conteúdo (content/resumos/)
+  function abasDaAula(aula) {
+    return ABAS.filter(function (x) {
+      if (x[0] === "resumo") return !!(aula.fases && aula.fases.length);
+      if (x[0] === "mapa") return !!(aula.mapa && aula.mapa.ramos);
+      return true;
+    });
+  }
 
   function telaAula(n, aba) {
     const aula = AULAS[n];
@@ -623,12 +634,14 @@
     if (S.prova && (S.prova.aula !== n || S.prova.tipo !== tipoProva)) S.prova = null;
 
     const r = resumoAula(n, S.dados);
-    const abas = ABAS.map(function (x) {
+    const abas = abasDaAula(aula).map(function (x) {
       return '<a href="' + rota("aula/" + n + "/" + x[0]) + '" class="' + (x[0] === aba ? "ativo" : "") + '">' + x[1] + "</a>";
     }).join("");
 
     let corpo;
-    if (aba === "pratica") corpo = corpoPratica(n, aula, r);
+    if (aba === "resumo" && aula.fases) corpo = corpoResumo(n, aula);
+    else if (aba === "mapa" && aula.mapa) corpo = corpoMapa(n, aula);
+    else if (aba === "pratica") corpo = corpoPratica(n, aula, r);
     else if (aba === "teorica") corpo = corpoProva(n, "teorica", r);
     else if (aba === "prova-pratica") corpo = corpoProva(n, "pratica", r);
     else if (aba === "nota") corpo = corpoNota(n, r);
@@ -650,9 +663,88 @@
     const blocoRevisao = document.querySelector(".revisao");
     if (blocoRevisao) blocoRevisao.scrollIntoView({ block: "start" });
     if (aba === "revisao") ligarRevisao(n);
+    else if (aba === "mapa") ligarMapa();
     else if (aba === "pratica") ligarPratica(n);
     else if (aba === "teorica") ligarProva(n, "teorica");
     else if (aba === "prova-pratica") ligarProva(n, "pratica");
+  }
+
+  // ----- resumo por hora e mapa mental -----
+
+  function corpoResumo(n, aula) {
+    const ordinais = ["1ª", "2ª", "3ª", "4ª"];
+    const fases = aula.fases.map(function (f, i) {
+      const lista = function (itens) { return "<ul>" + (itens || []).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>"; };
+      return '<details class="fase"' + (i === 0 ? " open" : "") + ">" +
+        '<summary><span class="fase-hora">' + (ordinais[i] || (f.hora + "ª")) + " hora</span>" +
+        '<span class="fase-titulo">' + esc(f.titulo) + '</span><span class="fase-tempo">' + esc(f.tempo || "") + "</span></summary>" +
+        '<div class="fase-corpo">' +
+        (f.ideia ? '<p class="fase-ideia">' + esc(f.ideia) + "</p>" : "") +
+        '<div class="fase-colunas">' +
+        '<div class="fase-bloco fase-aprender"><h3>📚 O que aprender</h3>' + lista(f.aprender) + "</div>" +
+        '<div class="fase-bloco fase-executar"><h3>🛠️ O que executar</h3>' + lista(f.executar) + "</div>" +
+        "</div>" +
+        (f.frase ? '<blockquote class="fase-frase">“' + esc(f.frase) + "”</blockquote>" : "") +
+        "</div></details>";
+    }).join("");
+    return '<div class="painel resumo-aula">' +
+      '<p class="muted">A aula dividida em ' + aula.fases.length + " partes: em cada hora, o que você precisa <b>aprender</b> e o que precisa <b>executar</b>. " +
+      "Leia o resumo, passe pelo mapa mental e depois vá para os flashcards: é na revisão que o conteúdo fixa.</p>" +
+      fases +
+      '<div class="linha-botoes"><a class="btn btn-secundario" href="' + rota("aula/" + n + "/mapa") + '">Ver o mapa mental</a>' +
+      '<a class="btn btn-primario" href="' + rota("aula/" + n + "/revisao") + '">Ir para os flashcards</a></div></div>';
+  }
+
+  function corpoMapa(n, aula) {
+    const m = aula.mapa;
+    const ramo = function (r, i) {
+      // "order" mantém a sequência original dos ramos no celular, onde os dois lados viram uma coluna só
+      return '<div class="mapa-ramo" data-cor="' + (i % 6) + '" style="order:' + i + '"><b>' + esc(r.titulo) + "</b><ul>" +
+        (r.itens || []).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div>";
+    };
+    // Mapa de dois lados: metade dos ramos à esquerda e metade à direita do tema central
+    const esquerda = [], direita = [];
+    m.ramos.forEach(function (r, i) { (i % 2 === 0 ? direita : esquerda).push(ramo(r, i)); });
+    return '<div class="painel mapa-painel">' +
+      '<p class="muted">Tudo o que a aula ensina numa imagem só. Tente explicar cada ramo em voz alta antes de abrir os flashcards.</p>' +
+      '<div class="mapa" id="mapa-mental"><svg class="mapa-linhas" aria-hidden="true"></svg>' +
+      '<div class="mapa-lado mapa-esquerda">' + esquerda.join("") + "</div>" +
+      '<div class="mapa-centro"><span>Aula ' + dois(n) + "</span><b>" + esc(m.centro) + "</b></div>" +
+      '<div class="mapa-lado mapa-direita">' + direita.join("") + "</div></div>" +
+      '<div class="linha-botoes"><a class="btn btn-secundario" href="' + rota("aula/" + n + "/resumo") + '">Ler o resumo</a>' +
+      '<a class="btn btn-primario" href="' + rota("aula/" + n + "/revisao") + '">Ir para os flashcards</a></div></div>';
+  }
+
+  // Desenha as linhas curvas do tema central até cada ramo (só no layout de dois lados)
+  function desenharMapa() {
+    const mapa = document.getElementById("mapa-mental");
+    if (!mapa) return;
+    const svg = mapa.querySelector(".mapa-linhas");
+    const centro = mapa.querySelector(".mapa-centro");
+    const base = mapa.getBoundingClientRect();
+    svg.setAttribute("width", base.width);
+    svg.setAttribute("height", base.height);
+    if (getComputedStyle(mapa).display !== "grid") { svg.innerHTML = ""; return; }
+    const c = centro.getBoundingClientRect();
+    const cy = c.top + c.height / 2 - base.top;
+    svg.innerHTML = Array.prototype.map.call(mapa.querySelectorAll(".mapa-ramo"), function (r) {
+      const b = r.getBoundingClientRect();
+      const direita = b.left > c.left;
+      const x1 = (direita ? c.right : c.left) - base.left;
+      const x2 = (direita ? b.left : b.right) - base.left;
+      const y2 = b.top + b.height / 2 - base.top;
+      const meio = (x1 + x2) / 2;
+      return '<path data-cor="' + r.dataset.cor + '" d="M' + x1 + "," + cy + " C" + meio + "," + cy + " " + meio + "," + y2 + " " + x2 + "," + y2 + '"/>';
+    }).join("");
+  }
+
+  function ligarMapa() {
+    desenharMapa();
+    setTimeout(desenharMapa, 600);   // depois que as fontes e a animação de entrada terminam
+    if (!window.__mapaResize) {
+      window.__mapaResize = true;
+      window.addEventListener("resize", desenharMapa);
+    }
   }
 
   // ----- revisão (flashcards) -----
