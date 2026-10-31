@@ -1036,6 +1036,7 @@
 
       '<section class="guia-bloco"><h2>2. As partes práticas</h2>' +
       "<p>São as tarefas que o mentor pediu para executar na aula. Marque <b>Executei</b> só depois de fazer de verdade. " +
+      "Para liberar o botão, escreva em uma linha <b>o que você fez</b>: esse relato fica salvo e os organizadores podem conferir. " +
       "Elas valem " + Math.round(P.checklist * 100) + "% da nota, e a prova prática pergunta sobre o que acontece quando você executa.</p></section>" +
 
       '<section class="guia-bloco"><h2>3. As provas</h2>' +
@@ -1053,7 +1054,10 @@
       "<p>Se você não bateu a meta hoje, a ofensiva ainda não está perdida: ela só zera se você passar um dia inteiro sem estudar. Cinco minutos por dia já mantêm a sequência.</p></section>" +
 
       '<section class="guia-bloco"><h2>🏆 Ranking</h2>' +
-      "<p>Cada mentoria tem o seu ranking, só com as pessoas daquela mentoria. A posição é definida pela <b>média das provas</b> (a melhor nota de cada prova). Em caso de empate, ganha quem fez mais provas e depois quem tem a maior ofensiva. Também tem um ranking separado só das maiores ofensivas.</p></section>" +
+      "<p>Cada mentoria tem o seu ranking, só com as pessoas daquela mentoria. A posição é definida pela <b>média das provas</b> (a melhor nota de cada prova). Em caso de empate, ganha quem fez mais provas e depois quem tem a maior ofensiva. Também tem um ranking separado só das maiores ofensivas.</p>" +
+      "<p>O ranking mede <b>quem sabe mais</b> (a nota). A <b>Temporada</b>, logo abaixo, mede <b>quem mais se dedica</b> em um período de 90 dias, e é ela que vale prêmio.</p></section>" +
+
+      blocoTemporadaGuia() +
 
       '<section class="guia-bloco"><h2>4. Nota e certificado</h2>' +
       '<table class="tabela"><thead><tr><th>Componente</th><th>Peso</th></tr></thead><tbody>' +
@@ -1166,6 +1170,77 @@
       { icone: "✅", nome: "Aula aprovada", desc: "Ser aprovado em uma aula", ok: l.aulas_aprovadas >= 1 },
       { icone: "🎓", nome: "Mentoria em dia", desc: "Aprovado em todas as aulas liberadas", ok: aulasTotal > 0 && l.aulas_aprovadas >= aulasTotal }
     ];
+  }
+
+  // Tabela de pontos e regras de justiça (usadas na página da Temporada e no Como funciona)
+  function tabelaXP(curso) {
+    const P = PONTOS, of = P.ofensiva || {};
+    return '<table class="tabela"><thead><tr><th>Ação</th><th>XP</th><th>Regra</th></tr></thead><tbody>' +
+      "<tr><td>Revisar um flashcard</td><td>" + P.revisao + "</td><td>Até " + P.limiteDia + " XP por dia. A revisão livre vale metade.</td></tr>" +
+      "<tr><td>Bater a meta do dia (" + REGRAS.metaDiaria + " cards)</td><td>+" + P.meta + "</td><td>Uma vez por dia</td></tr>" +
+      "<tr><td>Ofensiva de " + Object.keys(of).join(", ") + " dias</td><td>+" + Object.keys(of).map(function (k) { return of[k]; }).join(", +") + "</td><td>Dias seguidos batendo a meta, dentro da temporada</td></tr>" +
+      "<tr><td>Card dominado</td><td>" + P.dominado + "</td><td>Card que você lembra há 7 dias ou mais</td></tr>" +
+      "<tr><td>Parte prática executada</td><td>" + P.pratica + "</td><td>Com o relato do que fez. O organizador pode conferir.</td></tr>" +
+      "<tr><td>Prova</td><td>nota × " + P.prova + "</td><td>Melhor nota de cada prova feita na temporada (até " + (100 * P.prova) + ")</td></tr>" +
+      "<tr><td>Aula aprovada</td><td>+" + P.aula + "</td><td>Nota " + curso.notaMinima + " ou mais na aula</td></tr>" +
+      "</tbody></table>";
+  }
+
+  function regrasTemporada(t) {
+    return '<ul class="regras-lista"><li>Vale só o que é feito na mentoria da temporada, entre ' + dataBR(dataLocal(t.inicio)) + " e " + dataBR(dataLocal(t.fim)) + ". O que foi feito antes não conta: todo mundo larga do zero.</li>" +
+      "<li>Empate no placar: ganha quem tiver a maior média nas provas.</li>" +
+      "<li>Quem ganha um dos 3 primeiros lugares não concorre a Maior evolução nem a Ofensiva mais longa.</li>" +
+      (t.adminsConcorrem ? "" : "<li>Os organizadores aparecem no placar, mas não disputam os prêmios.</li>") +
+      "<li>Marcar prática sem ter feito, ou qualquer tentativa de burlar o placar, tira a pessoa da temporada.</li></ul>";
+  }
+
+  // Seção "Temporada" da página Como funciona
+  function blocoTemporadaGuia() {
+    const t = temporadaAtual();
+    if (!t) return "";
+    const curso = CURSOS.find(function (x) { return x.id === t.curso; }) || CURSOS[0];
+    const proximas = TEMPORADAS.filter(function (x) { return x !== t && dataLocal(x.inicio) > dataLocal(t.fim); });
+    const total = t.premios.reduce(function (s, p) { return s + (p.valor || 0); }, 0);
+    const vazio = { revisoes: 0, provas_feitas: 0, ofensiva_max: 0, max_nota: 0, dominados: 0, praticas: 0, aulas_aprovadas: 0 };
+    return '<section class="guia-bloco" id="temporada"><h2>🏆 Temporada: a competição de 90 dias</h2>' +
+      "<p>A Temporada é um jogo de <b>90 dias</b> em que toda a equipe disputa quem mais estuda e aprende de verdade. Cada temporada foca em <b>uma mentoria</b>, a que a empresa mais precisa naquele momento, e termina com prêmios para os vencedores.</p>" +
+      '<div class="aviso"><b>' + esc(t.nome) + ":</b> " + esc(curso.tipo + " " + curso.titulo) + " (" + esc(curso.mentor) + "), de <b>" + dataBR(dataLocal(t.inicio)) + "</b> a <b>" + dataBR(dataLocal(t.fim)) + "</b>." +
+      (total ? " <b>R$ " + total.toLocaleString("pt-BR") + "</b> em prêmios." : "") + "</div>" +
+      (proximas.length ? '<p class="muted pequeno">Próximas: ' + proximas.map(function (x) {
+        const c = CURSOS.find(function (y) { return y.id === x.curso; });
+        return esc(x.nome) + " (" + esc(c ? c.titulo : x.curso) + ", a partir de " + dataBR(dataLocal(x.inicio)) + ")";
+      }).join(" · ") + "</p>" : "") +
+
+      "<h3>Como ganhar XP (pontos)</h3>" +
+      "<p>Tudo o que você faz na mentoria da temporada vira XP automaticamente: não precisa registrar nada além do que já faz no Academy.</p>" +
+      tabelaXP(curso) +
+      '<p class="muted pequeno">O peso maior está nas <b>provas</b> e nos <b>cards dominados</b>: ninguém ganha só clicando, ganha quem aprende.</p>' +
+
+      "<h3>Os prêmios</h3><ul>" +
+      t.premios.map(function (p) { return "<li>" + p.icone + " <b>" + esc(p.titulo) + "</b>: " + esc(p.regra.charAt(0).toLowerCase() + p.regra.slice(1)) + ". O ganhador escolhe um entre " + p.opcoes.map(esc).join(", ") + ".</li>"; }).join("") +
+      "</ul>" +
+      "<p><b>Maior evolução</b> e <b>Ofensiva mais longa</b> existem para que qualquer pessoa tenha chance de ganhar, mesmo quem começou atrás: a evolução conta só os últimos 30 dias da temporada.</p>" +
+
+      "<h3>Destaque da semana</h3>" +
+      "<p>Além do placar dos 90 dias, existe um placar que <b>zera toda segunda</b>. Quem fizer mais XP de segunda a domingo aparece como destaque da semana. São 13 chances de brilhar ao longo da temporada.</p>" +
+
+      "<h3>Níveis</h3>" +
+      "<p>Conforme o seu XP cresce, você sobe de nível: " + NIVEIS.map(function (n) { return n.icone + " <b>" + esc(n.nome) + "</b> (" + n.xp + " XP)"; }).join(" → ") + ".</p>" +
+
+      "<h3>Selos</h3>" +
+      '<p>Conquistas que você desbloqueia ao longo da temporada. Ficam coloridos na página da Temporada quando você conquista.</p><div class="selos">' +
+      selosDe(vazio, 0).map(function (x) { return '<div class="selo ganho"><i>' + x.icone + "</i><b>" + esc(x.nome) + "</b><span>" + esc(x.desc) + "</span></div>"; }).join("") +
+      "</div>" +
+
+      "<h3>Regras de justiça</h3>" + regrasTemporada(t) +
+
+      "<h3>Como subir no placar</h3><ol class=\"guia-passos\">" +
+      "<li><b>Estude todo dia, mesmo que pouco.</b> Bater a meta diária rende bônus de ofensiva. Uma maratona num dia só bate no limite de " + PONTOS.limiteDia + " XP.</li>" +
+      "<li><b>Seja honesto nas notas dos flashcards.</b> Card dominado de verdade vale XP; marcar Fácil sem saber faz o card voltar e você esquecer.</li>" +
+      "<li><b>Execute as partes práticas</b> e escreva o que fez: cada uma vale " + PONTOS.pratica + " XP.</li>" +
+      "<li><b>Faça as provas assim que liberarem.</b> Elas são o que mais rende XP (até " + (100 * PONTOS.prova) + " cada), e a aula aprovada ainda dá +" + PONTOS.aula + ".</li>" +
+      "</ol>" +
+      '<p><a class="btn btn-primario" href="#/temporada">Ver o placar da temporada</a></p></section>';
   }
 
   // Faixa da temporada na tela de mentorias
@@ -1293,21 +1368,8 @@
           "<td>🔥 " + l.ofensiva_max + "</td><td>" + (l.media_provas !== null ? l.media_provas : "—") + "</td></tr>";
       }).join("") + "</tbody></table></div></section>";
 
-    const P = PONTOS, of = P.ofensiva || {};
-    const regras = '<section class="painel metodo-temporada"><h2>Como ganhar XP</h2><table class="tabela"><thead><tr><th>Ação</th><th>XP</th><th>Regra</th></tr></thead><tbody>' +
-      "<tr><td>Revisar um flashcard</td><td>" + P.revisao + "</td><td>Até " + P.limiteDia + " XP por dia. A revisão livre vale metade.</td></tr>" +
-      "<tr><td>Bater a meta do dia (" + REGRAS.metaDiaria + " cards)</td><td>+" + P.meta + "</td><td>Uma vez por dia</td></tr>" +
-      "<tr><td>Ofensiva de " + Object.keys(of).join(", ") + " dias</td><td>+" + Object.keys(of).map(function (k) { return of[k]; }).join(", +") + "</td><td>Dias seguidos batendo a meta, dentro da temporada</td></tr>" +
-      "<tr><td>Card dominado</td><td>" + P.dominado + "</td><td>Card que você lembra há 7 dias ou mais</td></tr>" +
-      "<tr><td>Parte prática executada</td><td>" + P.pratica + "</td><td>Com o relato do que fez. O organizador pode conferir.</td></tr>" +
-      "<tr><td>Prova</td><td>nota × " + P.prova + "</td><td>Melhor nota de cada prova feita na temporada (até " + (100 * P.prova) + ")</td></tr>" +
-      "<tr><td>Aula aprovada</td><td>+" + P.aula + "</td><td>Nota " + curso.notaMinima + " ou mais nas provas da aula</td></tr>" +
-      "</tbody></table>" +
-      "<ul class=\"regras-lista\"><li>Vale só o que é feito na mentoria da temporada, entre " + dataBR(dataLocal(t.inicio)) + " e " + dataBR(dataLocal(t.fim)) + ".</li>" +
-      "<li>Empate no placar: ganha quem tiver a maior média nas provas.</li>" +
-      "<li>Quem ganha um dos 3 primeiros lugares não concorre a Maior evolução nem a Ofensiva mais longa.</li>" +
-      (t.adminsConcorrem ? "" : "<li>Os organizadores aparecem no placar, mas não disputam os prêmios.</li>") +
-      "<li>Marcar prática sem ter feito, ou qualquer tentativa de burlar o placar, tira a pessoa da temporada.</li></ul></section>";
+    const regras = '<section class="painel metodo-temporada"><h2>Como ganhar XP</h2>' + tabelaXP(curso) + regrasTemporada(t) +
+      '<p class="muted pequeno">Explicação completa em <a href="#/como-funciona">Como funciona</a>.</p></section>';
 
     layout(hero + meuBloco + premios + '<div class="temporada-grade">' + blocoSemana + tabela + "</div>" + regras);
   }
