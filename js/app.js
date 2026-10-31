@@ -302,8 +302,8 @@
       '<header class="topo"><div class="topo-in">' +
       '<a href="#/" class="marca">' + marca("escuro") + "</a>" +
       '<nav class="menu">' +
-      '<a href="#/">Mentorias</a>' +
       (TEMPORADAS.length ? '<a href="#/temporada" class="menu-temporada">🏆 Temporada</a>' : "") +
+      '<a href="#/">Mentorias</a>' +
       (cursoDoMenu()
         ? '<a href="' + rota("") + '">Aulas</a>' +
           '<a href="' + rota("ranking") + '">Ranking</a>' +
