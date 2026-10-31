@@ -27,6 +27,8 @@ Aprovado na aula com nota **70 ou mais**, tendo feito as duas provas. O certific
 
 **Ofensiva e ranking:** a ofensiva conta os dias seguidos com pelo menos 5 flashcards revisados (`ACADEMY_REGRAS.metaDiaria`, no `content/curso.js`). Cada mentoria tem um ranking pela média das provas, calculado pela função `academy_ranking` no Supabase.
 
+**Temporadas (competição de 90 dias):** ficam em `TEMPORADAS`, no `content/curso.js`. Cada temporada tem a mentoria, as datas, os prêmios e se os administradores disputam. Os pontos (XP) ficam em `TEMPORADA_PONTOS` e os níveis em `TEMPORADA_NIVEIS`. O placar é calculado pela função `academy_temporada` no Supabase (`supabase/temporada.sql`). Para a próxima temporada, basta preencher os prêmios dela.
+
 **Versão das provas:** `versaoProvas` no `content/curso.js`. Se as perguntas forem trocadas, aumente esse número: as tentativas antigas deixam de contar na nota.
 
 Os flashcards não entram na nota: são a ferramenta de memorização. Depois de ver a resposta, a pessoa marca Errei, Difícil, Bom ou Fácil, e o card volta em 10 minutos, 1 dia, 3 dias, ~1 semana, ~3 semanas, e assim por diante.
