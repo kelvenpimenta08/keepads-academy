@@ -53,5 +53,61 @@
     })
   ];
 
+  // Temporadas (competição de 90 dias com prêmio). Cada temporada foca em uma mentoria.
+  // Datas no horário de Brasília; "fim" é o último dia que conta.
+  // adminsConcorrem: false = administradores aparecem no placar, mas não disputam os prêmios.
+  window.TEMPORADAS = [
+    {
+      id: "t1-adriano",
+      nome: "Temporada 1",
+      curso: "adriano-ia-trafego",
+      inicio: "2026-11-02",
+      fim: "2027-01-30",
+      adminsConcorrem: false,
+      premios: [
+        { id: "campeao", titulo: "Campeão da temporada", icone: "🥇", valor: 550, regra: "1º lugar no placar dos 90 dias",
+          opcoes: ["Air fryer grande (5 a 6 L)", "Cafeteira espresso ou de cápsula com espumador", "Caixa de som JBL ou smartwatch"] },
+        { id: "segundo", titulo: "2º lugar", icone: "🥈", valor: 200, regra: "2º lugar no placar dos 90 dias",
+          opcoes: ["Aparador e barbeador multifunção", "Liquidificador potente", "Fone Bluetooth com cancelamento de ruído"] },
+        { id: "terceiro", titulo: "3º lugar", icone: "🥉", valor: 120, regra: "3º lugar no placar dos 90 dias",
+          opcoes: ["Garrafa ou copo térmico Stanley", "Mixer de mão", "Sanduicheira/grill"] },
+        { id: "evolucao", titulo: "Maior evolução", icone: "📈", valor: 80, regra: "Mais XP nos últimos 30 dias (fora os 3 primeiros)",
+          opcoes: ["Kit churrasco (faca + tábua)", "Moedor de café manual", "Copo térmico"] },
+        { id: "ofensiva", titulo: "Ofensiva mais longa", icone: "🔥", valor: 50, regra: "Mais dias seguidos estudando na temporada (fora os 3 primeiros)",
+          opcoes: ["Caneca térmica", "Kit de barbear", "Squeeze de academia"] }
+      ]
+    },
+    {
+      id: "t2-di-santana",
+      nome: "Temporada 2",
+      curso: "di-santana-growth-commerce",
+      inicio: "2027-02-01",
+      fim: "2027-05-01",
+      adminsConcorrem: false,
+      premios: []           // a definir antes de a temporada começar
+    }
+  ];
+
+  // Pontos (XP) das temporadas. O placar é calculado no banco com estes números.
+  window.TEMPORADA_PONTOS = {
+    revisao: 1,             // por flashcard revisado
+    limiteDia: 40,          // máximo de XP de revisão por dia
+    livre: 0.5,             // a revisão livre vale metade
+    meta: 5,                // bônus do dia em que bate a meta diária (ACADEMY_REGRAS.metaDiaria)
+    ofensiva: { 7: 20, 30: 80, 60: 150 },  // bônus ao completar 7, 30 e 60 dias seguidos
+    dominado: 3,            // por card com memória de 7 dias ou mais
+    pratica: 15,            // por parte prática executada (com o relato do que fez)
+    prova: 2,               // XP = nota × 2 (melhor nota de cada prova na temporada)
+    aula: 50                // bônus por aula aprovada
+  };
+
+  // Níveis pelo XP da temporada
+  window.TEMPORADA_NIVEIS = [
+    { nome: "Bronze", xp: 0, icone: "🥉" },
+    { nome: "Prata", xp: 750, icone: "🥈" },
+    { nome: "Ouro", xp: 2000, icone: "🥇" },
+    { nome: "Diamante", xp: 4000, icone: "💎" }
+  ];
+
   window.AULAS = window.AULAS || {};
 })();
