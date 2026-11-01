@@ -664,6 +664,7 @@
     if (blocoRevisao) blocoRevisao.scrollIntoView({ block: "start" });
     if (aba === "revisao") ligarRevisao(n);
     else if (aba === "mapa") ligarMapa();
+    else if (aba === "resumo") ligarResumo(n);
     else if (aba === "pratica") ligarPratica(n);
     else if (aba === "teorica") ligarProva(n, "teorica");
     else if (aba === "prova-pratica") ligarProva(n, "pratica");
@@ -685,14 +686,145 @@
         '<div class="fase-bloco fase-executar"><h3>🛠️ O que executar</h3>' + lista(f.executar) + "</div>" +
         "</div>" +
         (f.frase ? '<blockquote class="fase-frase">“' + esc(f.frase) + "”</blockquote>" : "") +
+        (temAudio() ? '<button class="btn btn-secundario btn-ouvir-hora" data-ouvir="' + i + '">🔊 Ouvir esta hora</button>' : "") +
         "</div></details>";
     }).join("");
+    const velocidades = ["1", "1.25", "1.5", "1.75"];
+    const vel = lerVelocidade();
+    const player = temAudio()
+      ? '<div class="audio-resumo" id="audio-resumo">' +
+        '<button class="btn btn-primario" id="au-tocar">🔊 Ouvir o resumo</button>' +
+        '<button class="btn btn-secundario" id="au-pausar" hidden>⏸ Pausar</button>' +
+        '<button class="btn btn-secundario" id="au-parar" hidden>■ Parar</button>' +
+        '<label class="au-vel">Velocidade <select id="au-vel">' + velocidades.map(function (v) {
+          return '<option value="' + v + '"' + (v === vel ? " selected" : "") + ">" + v.replace(".", ",") + "x</option>";
+        }).join("") + "</select></label>" +
+        '<span class="au-status muted" id="au-status">Ouça no carro, na academia ou com o celular no bolso.</span></div>'
+      : "";
     return '<div class="painel resumo-aula">' +
       '<p class="muted">A aula dividida em ' + aula.fases.length + " partes: em cada hora, o que você precisa <b>aprender</b> e o que precisa <b>executar</b>. " +
       "Leia o resumo, passe pelo mapa mental e depois vá para os flashcards: é na revisão que o conteúdo fixa.</p>" +
+      player +
       fases +
       '<div class="linha-botoes"><a class="btn btn-secundario" href="' + rota("aula/" + n + "/mapa") + '">Ver o mapa mental</a>' +
       '<a class="btn btn-primario" href="' + rota("aula/" + n + "/revisao") + '">Ir para os flashcards</a></div></div>';
+  }
+
+  // ----- áudio do resumo (voz do próprio navegador, sem custo) -----
+
+  function temAudio() { return "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function"; }
+
+  function lerVelocidade() {
+    try { return localStorage.getItem("academy-audio-vel") || "1"; } catch (e) { return "1"; }
+  }
+
+  function pararAudio() {
+    if (S.audio) S.audio.cancelado = true;
+    S.audio = null;
+    try { if (temAudio()) window.speechSynthesis.cancel(); } catch (e) {}
+  }
+
+  function textoDaFase(f, i) {
+    const ordinal = ["Primeira", "Segunda", "Terceira", "Quarta"][i] || "Próxima";
+    const frase = function (t) { t = String(t || "").trim(); return t && !/[.!?:]$/.test(t) ? t + "." : t; };
+    return [ordinal + " hora: " + frase(f.titulo), frase(f.ideia),
+      "O que aprender."].concat((f.aprender || []).map(frase))
+      .concat(["O que executar."], (f.executar || []).map(frase))
+      .concat(f.frase ? ["Frase da aula: " + frase(f.frase)] : []).join(" ");
+  }
+
+  // O Chrome corta falas muito longas: o texto vai em pedaços de até ~220 caracteres, um depois do outro
+  function pedacos(texto) {
+    const frases = texto.replace(/[“”]/g, "").split(/(?<=[.!?:])\s+/);
+    const out = [];
+    let atual = "";
+    frases.forEach(function (f) {
+      if ((atual + " " + f).length > 220 && atual) { out.push(atual); atual = f; }
+      else atual = atual ? atual + " " + f : f;
+    });
+    if (atual) out.push(atual);
+    return out;
+  }
+
+  function ligarResumo(n) {
+    if (!temAudio()) return;
+    const aula = AULAS[n];
+    const q = function (id) { return document.getElementById(id); };
+    const fasesEl = Array.prototype.slice.call(document.querySelectorAll(".fase"));
+
+    function mostrar(estado) {
+      q("au-tocar").hidden = estado !== "parado";
+      q("au-pausar").hidden = estado === "parado";
+      q("au-parar").hidden = estado === "parado";
+      q("au-pausar").textContent = estado === "pausado" ? "▶ Continuar" : "⏸ Pausar";
+    }
+
+    function marcar(i) {
+      fasesEl.forEach(function (el, k) { el.classList.toggle("falando", k === i); });
+      if (i !== null && fasesEl[i]) { fasesEl[i].open = true; fasesEl[i].scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    }
+
+    // Fila de pedaços a partir da hora "inicio" (só ela, se "so" for verdadeiro)
+    function montarFila(inicio, so) {
+      const fila = [];
+      aula.fases.forEach(function (f, i) {
+        if (i < inicio || (so && i !== inicio)) return;
+        pedacos(textoDaFase(f, i)).forEach(function (p) { fila.push({ fase: i, texto: p }); });
+      });
+      return fila;
+    }
+
+    function tocar(inicio, so) { iniciar(montarFila(inicio, so), 0); }
+
+    function iniciar(fila, pos) {
+      pararAudio();
+      const estado = { fila: fila, pos: pos, cancelado: false };
+      S.audio = estado;
+      const vozes = window.speechSynthesis.getVoices();
+      // Prefere as vozes mais naturais (Edge "Natural"/"Online" e as do Google) em português do Brasil
+      const br = vozes.filter(function (v) { return /pt[-_]BR/i.test(v.lang); });
+      const voz = br.find(function (v) { return /natural|online/i.test(v.name); }) || br.find(function (v) { return /google/i.test(v.name); }) ||
+        br[0] || vozes.find(function (v) { return /^pt/i.test(v.lang); });
+      function proximo() {
+        if (estado.cancelado) return;
+        if (estado.pos >= estado.fila.length) {
+          S.audio = null; mostrar("parado"); marcar(null);
+          q("au-status").textContent = "Fim do resumo. Agora é hora dos flashcards.";
+          return;
+        }
+        const item = estado.fila[estado.pos++];
+        marcar(item.fase);
+        q("au-status").textContent = "Ouvindo a " + (item.fase + 1) + "ª hora…";
+        const u = new SpeechSynthesisUtterance(item.texto);
+        u.lang = "pt-BR";
+        if (voz) u.voice = voz;
+        u.rate = Number(q("au-vel").value) || 1;
+        u.onend = proximo;
+        u.onerror = function (ev) { if (ev.error !== "interrupted" && ev.error !== "canceled") proximo(); };
+        window.speechSynthesis.speak(u);
+      }
+      mostrar("tocando");
+      proximo();
+    }
+
+    q("au-tocar").onclick = function () { tocar(0, false); };
+    q("au-parar").onclick = function () {
+      pararAudio(); mostrar("parado"); marcar(null);
+      q("au-status").textContent = "Áudio parado.";
+    };
+    q("au-pausar").onclick = function () {
+      const s = window.speechSynthesis;
+      if (s.paused) { s.resume(); mostrar("tocando"); }
+      else { s.pause(); mostrar("pausado"); q("au-status").textContent = "Pausado."; }
+    };
+    q("au-vel").onchange = function () {
+      try { localStorage.setItem("academy-audio-vel", q("au-vel").value); } catch (e) {}
+      // Recomeça o pedaço atual já na nova velocidade
+      if (S.audio && !window.speechSynthesis.paused) iniciar(S.audio.fila, Math.max(0, S.audio.pos - 1));
+    };
+    document.querySelectorAll("[data-ouvir]").forEach(function (b) {
+      b.onclick = function () { tocar(Number(b.dataset.ouvir), true); };
+    });
   }
 
   function corpoMapa(n, aula) {
@@ -1593,6 +1725,7 @@
   // ---------- roteador ----------
 
   async function rotear() {
+    pararAudio();   // trocar de tela interrompe o áudio do resumo
     if (!configurado) return telaConfig();
     if (S.recuperacao) return telaNovaSenha();
     if (!S.session) return telaLogin();
