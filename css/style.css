@@ -463,6 +463,16 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .fase-executar { background: #fff7ea; }
 .fase-frase { margin: 0; font-style: italic; color: var(--muted); border-left: 3px solid var(--borda); padding-left: .9rem; }
 
+/* Áudio do resumo */
+.audio-resumo { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; background: var(--fundo); border-radius: 12px; padding: .8rem 1rem; }
+.audio-resumo [hidden] { display: none !important; }
+.au-vel { display: flex; align-items: center; gap: .4rem; margin: 0; font-size: .85rem; color: var(--muted); }
+.au-vel select { border: 1px solid var(--borda); border-radius: 8px; padding: .35rem .5rem; font: 500 .9rem var(--fonte-texto); background: #fff; }
+.au-status { font-size: .85rem; flex-basis: 100%; }
+.btn-ouvir-hora { justify-self: start; font-size: .88rem; padding: .5rem .9rem; }
+.fase.falando { border-color: var(--verde); box-shadow: 0 0 0 3px rgba(0, 202, 158, .25), var(--sombra); }
+.fase.falando .fase-hora { background: var(--verde); color: var(--preto); }
+
 /* ---------- Mapa mental ---------- */
 .mapa-painel > * + * { margin-top: 1rem; }
 .mapa { position: relative; display: grid; grid-template-columns: 1fr minmax(170px, 220px) 1fr; gap: 1rem 3.5rem; align-items: center; padding: .5rem 0; }
