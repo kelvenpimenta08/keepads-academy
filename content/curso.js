@@ -52,7 +52,8 @@
       prefixoArquivos: "ds-",   // arquivos desta mentoria: content/ds-aula-NN.js e audio/resumos/ds-aula-NN-hora-H.mp3
       aulas: [                  // novas aulas entram aqui conforme acontecerem
         { numero: 1, titulo: "Pesquisas que viram decisão", disponivel: true },
-        { numero: 2, titulo: "Planejamento anual por drivers", disponivel: true }
+        { numero: 2, titulo: "Planejamento anual por drivers", disponivel: true },
+        { numero: 3, titulo: "Matriz criativa de performance", disponivel: true }
       ]
     })
   ];
