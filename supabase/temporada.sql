@@ -56,9 +56,16 @@ as $$
       least(cfg.r_lim, (d.normais + d.livres * cfg.r_livre) * cfg.r_rev) as xp
     from dia_rev d cross join cfg
   ),
-  -- Meta do dia e ofensiva (dias seguidos batendo a meta, dentro da temporada)
+  -- Meta do dia e ofensiva (dias seguidos batendo a meta, dentro da temporada).
+  -- A meta do dia exige os flashcards E pelo menos 1 pomodoro concluído no mesmo dia.
+  focos as (
+    select distinct p.user_id, (p.concluido_em at time zone 'America/Sao_Paulo')::date as dia
+    from public.academy_pomodoros p
+  ),
   dias_meta as (
-    select d.user_id, d.dia from dia_rev d cross join cfg where d.total >= cfg.r_meta_dia
+    select d.user_id, d.dia from dia_rev d cross join cfg
+    join focos f on f.user_id = d.user_id and f.dia = d.dia
+    where d.total >= cfg.r_meta_dia
   ),
   ev_meta as (
     select m.user_id, m.dia, 'meta'::text as tipo, cfg.r_meta as xp from dias_meta m cross join cfg
