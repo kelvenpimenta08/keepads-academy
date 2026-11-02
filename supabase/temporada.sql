@@ -57,10 +57,12 @@ as $$
     from dia_rev d cross join cfg
   ),
   -- Meta do dia e ofensiva (dias seguidos batendo a meta, dentro da temporada).
-  -- A meta do dia exige os flashcards E pelo menos 1 pomodoro concluído no mesmo dia.
+  -- A meta do dia exige os flashcards E pelo menos 1 pomodoro concluído no mesmo dia,
+  -- sem dispersão (pomodoro de estudo com limiteFora segundos ou mais fora da plataforma não conta).
   focos as (
     select distinct p.user_id, (p.concluido_em at time zone 'America/Sao_Paulo')::date as dia
     from public.academy_pomodoros p
+    where p.tipo = 'execucao' or p.fora_segundos < coalesce((p_regras ->> 'limiteFora')::int, 300)
   ),
   dias_meta as (
     select d.user_id, d.dia from dia_rev d cross join cfg

@@ -61,7 +61,7 @@ revoke all on public.academy_pomodoros from anon;
 revoke update, delete on public.academy_pomodoros from authenticated;
 grant select, insert on public.academy_pomodoros to authenticated;
 
--- Ranking: a ofensiva agora exige, no mesmo dia, p_meta flashcards E pelo menos 1 pomodoro.
+-- Ranking: a ofensiva agora exige, no mesmo dia, p_meta flashcards E pelo menos 1 pomodoro sem dispersão.
 create or replace function public.academy_ranking(p_curso text, p_versao int, p_meta int)
 returns table (user_id uuid, nome text, provas_feitas int, media numeric, ofensiva int)
 language sql stable security definer set search_path = public
@@ -72,9 +72,12 @@ as $$
     group by 1, 2
     having count(*) >= p_meta
   ),
+  -- Pomodoro de estudo com 5 min ou mais fora da plataforma (disperso) não conta
+  -- (mesmo número de ACADEMY_REGRAS.limiteForaMinutos, no content/curso.js)
   focos as (
     select distinct p.user_id, (p.concluido_em at time zone 'America/Sao_Paulo')::date as dia
     from public.academy_pomodoros p
+    where p.tipo = 'execucao' or p.fora_segundos < 300
   ),
   dias as (
     select r.user_id, r.dia from revisoes r join focos f on f.user_id = r.user_id and f.dia = r.dia
