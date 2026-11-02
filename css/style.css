@@ -220,6 +220,19 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .relatorio-detalhe { list-style: none; padding: 0; margin: 1rem 0 0; }
 .relatorio-detalhe li { display: flex; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-top: 1px solid var(--borda); font-size: .92rem; }
 .relatorio-texto { white-space: pre-wrap; background: var(--fundo); border-radius: 10px; padding: .9rem 1rem; font: 400 .9rem/1.6 var(--fonte-texto); margin: .6rem 0 1rem; }
+.relatorio-sub { font-size: 1rem; margin: 1.4rem 0 0; }
+.pomo-tipos { display: grid; gap: .5rem; }
+.pomo-tipos .btn { flex-direction: column; align-items: flex-start; text-align: left; gap: .1rem; padding: .7rem 1rem; }
+.pomo-tipos .btn small { font-weight: 400; font-size: .8rem; opacity: .75; }
+.pomo-ou { margin: .8rem 0 .4rem; }
+.pomo-fora { font-size: .85rem; background: var(--fundo); border-radius: 8px; padding: .4rem .7rem; margin: 0 0 .7rem; }
+.pomo-fora.disperso { background: var(--erro-claro); color: var(--erro); }
+.portao { max-width: 640px; margin: 1rem auto; text-align: center; padding: 2rem; }
+.portao-icone { font-size: 3.4rem; line-height: 1; margin-bottom: .6rem; }
+.portao h1 { font-size: 1.6rem; }
+.portao .pomo-tipos { grid-template-columns: 1fr 1fr; margin: 1.2rem 0; }
+.portao-dicas { text-align: left; font-size: .88rem; color: var(--muted); padding-left: 1.1rem; margin: 0; }
+.portao-dicas li { margin-bottom: .4rem; }
 .pomo-relatorio { display: block; text-align: center; margin-top: .9rem; font-size: .85rem; font-weight: 600; }
 
 /* Pomodoro: chip no topo e painel flutuante (fica por cima de qualquer tela) */
@@ -436,6 +449,8 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .pomodoro-chip { font-size: .8rem; }
   .pomo-painel { top: auto; bottom: 16px; }
   .relatorio-grade { grid-template-columns: 1fr; }
+  .portao { padding: 1.4rem 1rem; }
+  .portao .pomo-tipos { grid-template-columns: 1fr; }
   .relatorio-hero .hero-stats { display: grid; grid-template-columns: 1fr 1fr; }
   .relatorio-hero .hero-stats b { font-size: 1.45rem; }
   .relatorio-periodo { min-width: 0; width: 100%; }
