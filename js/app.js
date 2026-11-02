@@ -24,7 +24,8 @@
     log: "academy_review_log",
     praticas: "academy_practice_checks",
     provas: "academy_quiz_attempts",
-    pomodoros: "academy_pomodoros"
+    pomodoros: "academy_pomodoros",
+    travas: "academy_travas"
   };
 
   // Estado da sessão no navegador
@@ -143,10 +144,11 @@
       sb.from(T.praticas).select("*").eq("user_id", uid),
       sb.from(T.provas).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }),
       sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid),
-      sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em,tipo,fora_segundos,saidas").eq("user_id", uid)
+      sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em,tipo,fora_segundos,saidas").eq("user_id", uid),
+      sb.from(T.travas).select("*").eq("user_id", uid).order("created_at", { ascending: false })
     ]);
     res.forEach(function (r) { if (r.error) throw r.error; });
-    S.bruto = { cards: res[0].data, checks: res[1].data, provas: res[2].data, log: res[3].data, pomodoros: res[4].data };
+    S.bruto = { cards: res[0].data, checks: res[1].data, provas: res[2].data, log: res[3].data, pomodoros: res[4].data, travas: res[5].data };
     S.porCurso = {};
     S.dados = CURSO ? dadosDoCurso(CURSO) : null;
   }
@@ -555,6 +557,7 @@
       '<p class="hero-kicker">keep ads academy</p>' +
       "<h1>Olá" + (primeiroNome ? ", " + esc(primeiroNome) : "") + "! Qual mentoria você vai estudar hoje?</h1>" +
       "<p>Escolha a mentoria ou o curso para ver as aulas, revisar os flashcards, executar as práticas e fazer as provas.</p></div></section>" +
+      blocoTrava() +
       bannerTemporada() +
       blocoOfensiva() +
       blocoSemana() +
@@ -1366,6 +1369,15 @@
       "<p>Em <b>Relatório</b> (no menu) você vê quantas horas estudou, quantos pomodoros fez e quantos flashcards revisou nos últimos <b>7 ou 30 dias</b>, dia a dia, comparado ao período anterior. Tem um botão para copiar o resumo e mandar no WhatsApp.</p>" +
       "<p><b>Horas de estudo</b> = os minutos dos pomodoros concluídos + o tempo nos flashcards fora de um pomodoro (sem contar duas vezes). O tempo nos cards é estimado pelo intervalo entre um card e o próximo.</p>" +
       "<p>O <b>Ranking de foco</b> mostra quem fez mais pomodoros. No Ranking de cada mentoria ele aparece com a semana atual e zera toda segunda-feira.</p></section>" +
+      '<section class="guia-bloco"><h2>🧭 Quando você travar</h2>' +
+      "<p>Se você ficar " + REGRAS.travaDiasParado + " dias sem estudar, ou com uma aula começada parada há " + REGRAS.travaDiasAula + " dias, a tela inicial pergunta: <b>O que impediu o próximo passo?</b> Sem julgamento. Cada resposta mostra na hora um caminho:</p><ul>" +
+      "<li><b>⏰ Não tive tempo:</b> proteger um horário fixo na agenda (1 pomodoro por dia já basta) e rever a carga com a liderança.</li>" +
+      "<li><b>🧭 Não sei por onde começar:</b> o próximo passo exato, com um exemplo do que fazer.</li>" +
+      "<li><b>🤔 Não entendi:</b> o mesmo tema explicado de outro jeito (áudio, mapa mental) e prática nos flashcards.</li>" +
+      "<li><b>🎯 Não vejo utilidade:</b> onde aquilo entra numa demanda real de trabalho, com um desafio de 48 horas.</li>" +
+      "<li><b>🏁 Comecei e não terminei:</b> o escopo diminui para uma única parte, com um marco de conclusão para amanhã.</li>" +
+      "<li><b>🛡️ Tenho receio de errar:</b> praticar no ambiente de teste, com feedback privado.</li></ul>" +
+      "<p>A resposta fica visível só para você e a liderança, que usa isso para ajudar, não para cobrar.</p></section>" +
       '<section class="guia-bloco"><h2>🔒 Aulas só com pomodoro e tempo disperso</h2>' +
       "<p>As aulas (resumo, áudio, flashcards, parte prática e provas) só abrem com um pomodoro rodando. Ao clicar em <b>Revisar agora</b> ou <b>Abrir aula</b> sem pomodoro, você escolhe o tipo e entra na hora:</p>" +
       "<ul><li><b>🎧 Estudo:</b> para estudar dentro da plataforma. Se você sair para outra aba ou programa, o tempo fora é medido. " +
@@ -1765,7 +1777,8 @@
       sb.from(T.perfis).select("id,nome,email,created_at").order("nome"),
       sb.from(T.cards).select("user_id,card_id,aula,interval_days,due").eq("curso", CURSO.id),
       sb.from(T.praticas).select("user_id,aula,task_id,done").eq("curso", CURSO.id),
-      sb.from(T.provas).select("user_id,aula,tipo,nota,created_at,versao:respostas->_versao").eq("curso", CURSO.id)
+      sb.from(T.provas).select("user_id,aula,tipo,nota,created_at,versao:respostas->_versao").eq("curso", CURSO.id),
+      sb.from(T.travas).select("*").order("created_at", { ascending: false })
     ]);
     const falhou = res.find(function (r) { return r.error; });
     if (falhou) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(falhou.error)) + "</p></div>"); return; }
@@ -1798,9 +1811,247 @@
       "<h1>Equipe</h1><p class=\"muted\">" + esc(CURSO.tipo + " " + CURSO.titulo + " · " + CURSO.mentor) +
       ". Progresso de todo mundo que criou conta: " + linhas.length + " pessoa(s).</p>" +
       (disponiveis.length ? "" : '<p class="aviso">Esta mentoria ainda não tem aulas liberadas.</p>') +
-      '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th>' + cab + "<th>Aprovadas</th><th>Última prova</th></tr></thead><tbody>" + corpo + "</tbody></table></div>"
+      '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th>' + cab + "<th>Aprovadas</th><th>Última prova</th></tr></thead><tbody>" + corpo + "</tbody></table></div>" +
+      painelTravas(res[4].data, res[0].data)
     );
   }
+
+  // Quem travou nos últimos 30 dias e por quê (todas as mentorias), para a liderança e a psicóloga agirem
+  function painelTravas(travas, perfis) {
+    const limite = Date.now() - 30 * DIA;
+    const lista = (travas || []).filter(function (t) { return Date.parse(t.created_at) >= limite; });
+    const nome = function (id) { const p = perfis.find(function (x) { return x.id === id; }); return p ? p.nome || p.email : "(sem nome)"; };
+    const contagem = MOTIVOS.map(function (m) {
+      const n = lista.filter(function (t) { return t.motivo === m.id; }).length;
+      return n ? '<span class="chip chip-cinza">' + m.icone + " " + m.texto + ": <b>" + n + "</b></span>" : "";
+    }).join(" ");
+    const combinado = {
+      tempo: "Rever a carga e proteger um horário fixo", comecar: "Mostrar o próximo passo com um exemplo",
+      entender: "Explicar de outro jeito e praticar junto", utilidade: "Ligar o tema a uma demanda de trabalho",
+      terminar: "Reduzir o escopo e cobrar o marco", receio: "Praticar em ambiente de teste, feedback em particular"
+    };
+    const corpo = lista.map(function (t) {
+      const c = CURSOS.find(function (x) { return x.id === t.curso; });
+      const m = motivoDe(t.motivo);
+      return "<tr><td><b>" + esc(nome(t.user_id)) + "</b></td><td>" + m.icone + " " + esc(m.texto) + "</td><td>" +
+        (t.situacao === "parado" ? t.dias_parado + " dias sem estudar" : "Aula " + dois(t.aula) + " parada há " + t.dias_parado + " dias") +
+        (c && t.aula ? '<div class="muted pequeno">' + esc(c.mentor) + " · Aula " + dois(t.aula) + "</div>" : "") + "</td><td>" +
+        esc(combinado[t.motivo] || "") + (t.marco ? '<div class="muted pequeno">Marco: ' + esc(t.marco) + " até " + dataBR(t.prazo + "T12:00:00") + "</div>" : "") +
+        "</td><td>" + dataBR(t.created_at) + "</td></tr>";
+    }).join("");
+    return '<section class="painel painel-travas"><h2>🧭 Quem travou (últimos 30 dias)</h2>' +
+      '<p class="muted pequeno">Respostas para "O que impediu o próximo passo?". A pergunta aparece para quem fica ' + REGRAS.travaDiasParado +
+      " dias sem estudar ou com uma aula parada há " + REGRAS.travaDiasAula + " dias. Todas as mentorias.</p>" +
+      (lista.length
+        ? '<p class="travas-contagem">' + contagem + "</p>" +
+          '<div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr><th>Pessoa</th><th>Causa</th><th>Situação</th><th>O que fazer</th><th>Quando</th></tr></thead><tbody>' + corpo + "</tbody></table></div>"
+        : '<p class="muted">Ninguém travou nos últimos 30 dias. 🎉</p>') + "</section>";
+  }
+
+  // ---------- feedback para quem travou ----------
+  // Quando a pessoa fica REGRAS.travaDiasParado dias sem estudar, ou com uma aula começada e não
+  // aprovada parada há REGRAS.travaDiasAula dias, a tela inicial pergunta "O que impediu o próximo
+  // passo?". Cada causa mostra na hora uma ação concreta, e a resposta vai para a Equipe (academy_travas).
+  const MOTIVOS = [
+    { id: "tempo", icone: "⏰", texto: "Não tive tempo" },
+    { id: "comecar", icone: "🧭", texto: "Não sei por onde começar" },
+    { id: "entender", icone: "🤔", texto: "Não entendi" },
+    { id: "utilidade", icone: "🎯", texto: "Não vejo utilidade" },
+    { id: "terminar", icone: "🏁", texto: "Comecei e não terminei" },
+    { id: "receio", icone: "🛡️", texto: "Tenho receio de errar" }
+  ];
+  const TRAVA_ADIADA = "academy-trava-adiada";
+  function motivoDe(id) { return MOTIVOS.find(function (m) { return m.id === id; }) || { icone: "❔", texto: id }; }
+
+  // Última atividade de estudo (flashcard, pomodoro, parte prática ou prova), no geral ou de uma aula
+  function ultimaAtividade(filtro) {
+    const b = S.bruto, ok = filtro || function () { return true; };
+    const datas = [].concat(
+      b.log.filter(ok).map(function (l) { return l.reviewed_at; }),
+      filtro ? [] : b.pomodoros.map(function (p) { return p.concluido_em; }),
+      b.checks.filter(ok).filter(function (c) { return c.done_at; }).map(function (c) { return c.done_at; }),
+      b.provas.filter(ok).map(function (p) { return p.created_at; })
+    ).map(function (d) { return Date.parse(d); }).filter(function (t) { return !isNaN(t); });
+    return datas.length ? Math.max.apply(null, datas) : null;
+  }
+  function diasDesde(t) { return Math.floor((inicioDoDia(new Date()) - inicioDoDia(new Date(t))) / DIA); }
+
+  function detectarTrava() {
+    if (!S.bruto || !S.perfil) return null;
+    const ultima = (S.bruto.travas || [])[0];
+    if (ultima && Date.now() - Date.parse(ultima.created_at) < REGRAS.travaPerguntarDeNovo * DIA) return null;
+    try { if (localStorage.getItem(TRAVA_ADIADA) === diaLocal(new Date())) return null; } catch (e) { /* sem storage */ }
+
+    const geral = ultimaAtividade();
+    const desdeConta = S.perfil.created_at ? diasDesde(Date.parse(S.perfil.created_at)) : 0;
+    const parado = geral ? diasDesde(geral) : desdeConta;
+    if (parado >= REGRAS.travaDiasParado) return { situacao: "parado", dias: parado, nunca: !geral };
+
+    // Aula começada, não aprovada e sem nenhum movimento há dias
+    let pior = null;
+    CURSOS.forEach(function (c) {
+      const dados = dadosDoCurso(c);
+      aulasDisponiveis(c).forEach(function (a) {
+        const t = ultimaAtividade(function (x) { return x.curso === c.id && x.aula === a.numero; });
+        if (!t) return;
+        const r = comCurso(c, function () { return resumoAula(a.numero, dados); });
+        const dias = diasDesde(t);
+        if (!r.aprovado && dias >= REGRAS.travaDiasAula && (!pior || dias > pior.dias)) pior = { situacao: "aula", dias: dias, curso: c, aula: a };
+      });
+    });
+    return pior;
+  }
+
+  // Próximo passo concreto: a aula travada, ou a primeira aula ainda não aprovada
+  function proximoPasso(trava) {
+    let alvo = trava && trava.curso ? { curso: trava.curso, aula: trava.aula } : null;
+    if (!alvo) {
+      const ordem = [cursoDoMenu()].concat(CURSOS.filter(function (c) { return c !== cursoDoMenu(); }));
+      ordem.some(function (c) {
+        const dados = dadosDoCurso(c);
+        const a = aulasDisponiveis(c).find(function (x) { return !comCurso(c, function () { return resumoAula(x.numero, dados).aprovado; }); });
+        if (a) alvo = { curso: c, aula: a };
+        return !!a;
+      });
+    }
+    if (!alvo) return null;
+    const c = alvo.curso, n = alvo.aula.numero, dados = dadosDoCurso(c);
+    const conteudo = (TODAS_AULAS[c.id] || {})[n];
+    const r = comCurso(c, function () { return resumoAula(n, dados); });
+    const tarefa = conteudo.pratica.find(function (t) { const k = dados.checks[n + ":" + t.id]; return !(k && k.done); });
+    return {
+      curso: c, n: n, titulo: alvo.aula.titulo, conteudo: conteudo, r: r, tarefa: tarefa,
+      link: function (aba) { return "#/c/" + encodeURIComponent(c.id) + "/aula/" + n + "/" + aba; }
+    };
+  }
+
+  function blocoTrava() {
+    const t = detectarTrava();
+    if (!t) return blocoMarco();
+    S.travaAtual = t;
+    const situacao = t.situacao === "parado"
+      ? (t.nunca ? "Você ainda não começou a estudar por aqui." : "Faz <b>" + t.dias + " dias</b> que você não estuda por aqui.")
+      : "A <b>Aula " + dois(t.aula.numero) + " · " + esc(t.aula.titulo) + "</b> está parada há <b>" + t.dias + " dias</b>.";
+    return '<section class="painel trava" id="trava"><div class="trava-cabeca"><span class="trava-icone">🧭</span><div>' +
+      '<p class="hero-kicker">vamos destravar</p><h2>O que impediu o próximo passo?</h2>' +
+      '<p class="muted">' + situacao + " Sem julgamento: escolha o que mais se parece com o seu caso e a gente mostra o caminho. Só você e a liderança veem a resposta.</p></div></div>" +
+      '<div class="trava-opcoes">' + MOTIVOS.map(function (m) {
+        return '<button class="trava-opcao" data-trava="' + m.id + '"><span>' + m.icone + "</span>" + m.texto + "</button>";
+      }).join("") + "</div>" +
+      '<button class="link" data-trava-adiar>Agora não</button></section>';
+  }
+
+  // "Comecei e não terminei": mostra o marco combinado até ele ser cumprido
+  function blocoMarco() {
+    const m = ((S.bruto && S.bruto.travas) || []).find(function (x) { return x.motivo === "terminar" && x.marco; });
+    if (!m || !m.curso) return "";
+    const c = CURSOS.find(function (x) { return x.id === m.curso; });
+    if (!c) return "";
+    const conteudo = (TODAS_AULAS[c.id] || {})[m.aula];
+    const tarefa = conteudo && conteudo.pratica.find(function (t) { return t.titulo === m.marco; });
+    const feito = tarefa && dadosDoCurso(c).checks[m.aula + ":" + tarefa.id];
+    if (!tarefa || (feito && feito.done)) return "";
+    const prazo = new Date(m.prazo + "T23:59:59");
+    if (Date.now() - prazo.getTime() > 3 * DIA) return "";
+    const atrasado = Date.now() > prazo.getTime();
+    return '<a class="semana-resumo marco' + (atrasado ? " atrasado" : "") + '" href="#/c/' + encodeURIComponent(c.id) + "/aula/" + m.aula + '/pratica">' +
+      '<span class="semana-titulo">🏁 Seu marco</span><span>Concluir <b>' + esc(m.marco) + "</b> (Aula " + dois(m.aula) + ")</span>" +
+      "<span>" + (atrasado ? "⚠️ Prazo era " : "até ") + dataBR(prazo) + '</span><span class="semana-ver">Fazer agora →</span></a>';
+  }
+
+  function acaoDaTrava(motivo, t, passo) {
+    const btn = function (href, texto, primario) { return '<a class="btn ' + (primario ? "btn-primario" : "btn-secundario") + '" href="' + href + '">' + texto + "</a>"; };
+    const pomodoro = '<button class="btn btn-primario" data-pomodoro-abrir>🍅 Começar 1 pomodoro agora</button>';
+    const aulaTxt = passo ? "Aula " + dois(passo.n) + " · " + esc(passo.titulo) : "";
+    const exemplo = passo && passo.tarefa
+      ? '<div class="trava-exemplo"><b>' + esc(passo.tarefa.titulo) + "</b><p>" + esc(passo.tarefa.descricao) + "</p></div>" : "";
+    const cards = passo ? passo.r.vencidos + passo.r.novos : 0;
+    switch (motivo) {
+      case "tempo": {
+        const agenda = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent("🍅 Pomodoro Keep Ads Academy") +
+          "&details=" + encodeURIComponent("30 minutos de estudo: 1 pomodoro + 5 flashcards. " + location.href.split("#")[0]) + "&recur=" + encodeURIComponent("RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+        return "<h3>⏰ Vamos proteger uma janela</h3>" +
+          "<p>Não precisa de horas: <b>1 pomodoro de " + REGRAS.pomodoroMinutos + " minutos + " + REGRAS.metaDiaria + " flashcards</b> por dia já mantém a ofensiva. O segredo é ter um horário fixo, como uma reunião com você mesmo.</p>" +
+          "<ol><li>Escolha um horário em que você raramente é interrompido (antes do expediente, depois do almoço ou no fim do dia).</li>" +
+          "<li>Bloqueie esse horário na agenda, de segunda a sexta.</li><li>Nesse horário, celular longe e um pomodoro de estudo.</li></ol>" +
+          '<p class="muted pequeno">A liderança vai ver que a carga está pesada para rever as suas demandas com você.</p>' +
+          '<div class="linha-botoes">' + pomodoro + '<a class="btn btn-secundario" href="' + agenda + '" target="_blank" rel="noopener">📅 Bloquear na agenda</a></div>';
+      }
+      case "comecar":
+        if (!passo) return "<h3>🧭 Seu próximo passo</h3><p>Você já aprovou todas as aulas liberadas. Revise os flashcards do dia para manter a memória.</p>";
+        return "<h3>🧭 Seu próximo passo é este</h3><p>Comece pela <b>" + aulaTxt + "</b>. Um passo de cada vez:</p><ol>" +
+          (cards ? "<li>Revise <b>" + cards + " flashcards</b> (uns 10 minutos).</li>" : "") +
+          (passo.tarefa ? "<li>Depois execute esta parte prática. Exemplo do que fazer:" + exemplo + "</li>" : "") + "</ol>" +
+          '<div class="linha-botoes">' + (cards ? btn(passo.link("revisao"), "Revisar " + cards + " flashcards", true) : "") +
+          (passo.tarefa ? btn(passo.link("pratica"), "Abrir a parte prática", !cards) : "") + "</div>";
+      case "entender":
+        if (!passo) return "<h3>🤔 Vamos por outro caminho</h3><p>Fale com a sua liderança sobre o tema que ficou difícil.</p>";
+        return "<h3>🤔 Vamos explicar de outro jeito</h3><p>Na <b>" + aulaTxt + "</b>, tente nesta ordem:</p><ol>" +
+          (passo.conteudo.fases ? "<li><b>Ouça o resumo em áudio</b>: a aula explicada por partes, em poucos minutos.</li>" : "") +
+          (passo.conteudo.mapa ? "<li><b>Veja o mapa mental</b>: a aula inteira numa imagem só.</li>" : "") +
+          "<li><b>Pratique com os flashcards</b>: responda em voz alta antes de virar. Errar faz parte e mostra o que rever.</li></ol>" +
+          '<p class="muted pequeno">Se continuar travado, peça uma conversa com a liderança: ela já sabe que este tema ficou difícil e pode praticar com você.</p>' +
+          '<div class="linha-botoes">' + (passo.conteudo.fases ? btn(passo.link("resumo"), "🎧 Ouvir o resumo", true) : "") +
+          (passo.conteudo.mapa ? btn(passo.link("mapa"), "Ver o mapa mental") : "") + btn(passo.link("revisao"), "Praticar com os cards") + "</div>";
+      case "utilidade": {
+        if (!passo) return "<h3>🎯 Onde isso entra no seu trabalho</h3><p>Converse com a liderança sobre como aplicar o que já estudou.</p>";
+        const exec = [];
+        (passo.conteudo.fases || []).forEach(function (f) { (f.executar || []).forEach(function (x) { if (exec.length < 4) exec.push(x); }); });
+        const lista = exec.length ? exec : passo.conteudo.pratica.slice(0, 3).map(function (t) { return t.titulo + ": " + t.descricao; });
+        return "<h3>🎯 Onde a " + aulaTxt + " entra no seu trabalho</h3><p>Isto aqui vira tarefa de verdade na agência:</p><ul>" +
+          lista.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>" +
+          "<p><b>Desafio:</b> escolha <b>1 cliente real</b> e aplique um desses itens nas próximas 48 horas. Depois marque a parte prática como executada, contando o que fez.</p>" +
+          '<div class="linha-botoes">' + btn(passo.link("pratica"), "Ver as partes práticas", true) + (passo.conteudo.fases ? btn(passo.link("resumo"), "Ver o resumo") : "") + "</div>";
+      }
+      case "terminar":
+        if (!passo || !passo.tarefa) return "<h3>🏁 Vamos fechar o que começou</h3><p>Você não tem parte prática pendente nesta aula. Revise os flashcards do dia e siga para a próxima.</p>";
+        return "<h3>🏁 Vamos diminuir o tamanho</h3><p>Em vez da aula inteira, o seu único compromisso agora é <b>uma parte</b>:</p>" + exemplo +
+          "<p>🎯 <b>Marco:</b> concluir até <b>" + dataBR(somarDias(new Date(), 1)) + "</b> (amanhã). Ele fica na sua tela inicial até você marcar como executada.</p>" +
+          '<div class="linha-botoes">' + btn(passo.link("pratica"), "Fazer esta parte agora", true) + "</div>";
+      case "receio":
+        return "<h3>🛡️ Aqui errar é seguro</h3><p>Esta plataforma é o seu ambiente de teste: errar aqui é o que evita errar com o cliente.</p><ul>" +
+          "<li><b>Revisão livre:</b> passa por todos os cards sem mexer na sua agenda. Erre à vontade.</li>" +
+          "<li><b>Provas:</b> vale a sua melhor nota. Uma nota baixa não fica marcada contra você.</li>" +
+          "<li><b>Seu feedback é privado:</b> só você e a liderança veem o que você responde e o seu relatório.</li>" +
+          "<li><b>Parte prática:</b> teste primeiro numa conta, pasta ou cliente de teste antes de aplicar no cliente real.</li></ul>" +
+          '<div class="linha-botoes">' + (passo ? btn(passo.link("revisao"), "Treinar na revisão livre", true) : "") + "</div>";
+    }
+    return "";
+  }
+
+  document.addEventListener("click", async function (ev) {
+    if (ev.target.closest("[data-trava-adiar]")) {
+      try { localStorage.setItem(TRAVA_ADIADA, diaLocal(new Date())); } catch (e) { /* sem storage */ }
+      const b = document.getElementById("trava");
+      if (b) b.remove();
+      return;
+    }
+    const op = ev.target.closest("[data-trava]");
+    if (!op || !S.travaAtual) return;
+    const motivo = op.dataset.trava, t = S.travaAtual;
+    const passo = proximoPasso(t);
+    const linha = {
+      user_id: S.session.user.id, motivo: motivo, situacao: t.situacao, dias_parado: Math.min(t.dias, 3650),
+      curso: passo ? passo.curso.id : null, aula: passo ? passo.n : null,
+      marco: motivo === "terminar" && passo && passo.tarefa ? passo.tarefa.titulo.slice(0, 300) : null,
+      prazo: motivo === "terminar" && passo && passo.tarefa ? diaLocal(somarDias(new Date(), 1)) : null
+    };
+    document.querySelectorAll("[data-trava]").forEach(function (b) { b.disabled = true; });
+    const r = await sb.from(T.travas).insert(linha);
+    if (r.error) {
+      toast("Não consegui salvar a resposta: " + traduzErro(r.error), "erro");
+      document.querySelectorAll("[data-trava]").forEach(function (b) { b.disabled = false; });
+      return;
+    }
+    S.bruto.travas.unshift(Object.assign({ created_at: new Date().toISOString() }, linha));
+    S.travaAtual = null;
+    const bloco = document.getElementById("trava");
+    if (bloco) {
+      const m = motivoDe(motivo);
+      bloco.innerHTML = '<p class="hero-kicker">você respondeu: ' + m.icone + " " + esc(m.texto.toLowerCase()) + "</p>" + acaoDaTrava(motivo, t, passo);
+      bloco.classList.add("respondida");
+    }
+  });
 
   // ---------- relatório de estudo ----------
   // Horas de estudo = minutos de foco dos pomodoros + tempo nos flashcards fora de um pomodoro.
