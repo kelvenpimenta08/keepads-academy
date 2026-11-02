@@ -44,12 +44,16 @@
     Object.assign({}, padrao, {
       id: "di-santana-growth-commerce",
       tipo: "Mentoria",
-      titulo: "Growth Commerce",
+      titulo: "Growth Commerce AI",
       mentor: "Di Santana",
-      descricao: "O conteúdo desta mentoria entra aqui conforme as aulas acontecerem.",
+      descricao: "Consultoria de growth para e-commerce em grupo: leitura estratégica, métodos, ferramentas e prompts de IA para cada aula virar uma decisão aplicada na semana.",
       imagem: "",
       versaoProvas: 1,
-      aulas: []             // as aulas entram aqui quando o conteúdo chegar
+      prefixoArquivos: "ds-",   // arquivos desta mentoria: content/ds-aula-NN.js e audio/resumos/ds-aula-NN-hora-H.mp3
+      aulas: [                  // novas aulas entram aqui conforme acontecerem
+        { numero: 1, titulo: "Pesquisas que viram decisão", disponivel: true },
+        { numero: 2, titulo: "Planejamento anual por drivers", disponivel: true }
+      ]
     })
   ];
 
