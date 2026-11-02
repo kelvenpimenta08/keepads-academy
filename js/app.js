@@ -710,18 +710,38 @@
       '<a class="btn btn-primario" href="' + rota("aula/" + n + "/revisao") + '">Ir para os flashcards</a></div></div>';
   }
 
-  // ----- áudio do resumo (voz do próprio navegador, sem custo) -----
+  // ----- áudio do resumo -----
+  // Cada hora tem uma faixa MP3 com voz neural (gerada por ferramentas/gerar_audios.py).
+  // Se a faixa não existir (aula nova ainda sem áudio), lê com a voz do próprio navegador.
 
-  function temAudio() { return "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function"; }
+  function temAudio() { return typeof Audio === "function"; }
+  function temVozNavegador() { return "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function"; }
+
+  // Endereço base do site, tirado do próprio app.js (funciona no GitHub Pages e no teste local)
+  const BASE_SITE = (function () {
+    const s = document.querySelector('script[src*="js/app.js"]');
+    return s ? s.src.replace(/js\/app\.js.*$/, "") : "";
+  })();
+
+  function urlAudio(n, hora) { return BASE_SITE + "audio/resumos/aula-" + dois(n) + "-hora-" + hora + ".mp3"; }
 
   function lerVelocidade() {
     try { return localStorage.getItem("academy-audio-vel") || "1"; } catch (e) { return "1"; }
   }
 
   function pararAudio() {
-    if (S.audio) S.audio.cancelado = true;
+    const a = S.audio;
     S.audio = null;
-    try { if (temAudio()) window.speechSynthesis.cancel(); } catch (e) {}
+    if (a) {
+      a.cancelado = true;
+      if (a.el) { a.el.pause(); a.el.removeAttribute("src"); }
+    }
+    try { if (temVozNavegador()) window.speechSynthesis.cancel(); } catch (e) {}
+  }
+
+  function minutos(seg) {
+    seg = Math.max(0, Math.floor(seg || 0));
+    return Math.floor(seg / 60) + ":" + String(seg % 60).padStart(2, "0");
   }
 
   function textoDaFase(f, i) {
@@ -747,7 +767,7 @@
   }
 
   function ligarResumo(n) {
-    if (!temAudio()) return;
+    if (!temAudio() || !document.getElementById("au-tocar")) return;
     const aula = AULAS[n];
     const q = function (id) { return document.getElementById(id); };
     const fasesEl = Array.prototype.slice.call(document.querySelectorAll(".fase"));
@@ -764,47 +784,66 @@
       if (i !== null && fasesEl[i]) { fasesEl[i].open = true; fasesEl[i].scrollIntoView({ behavior: "smooth", block: "nearest" }); }
     }
 
-    // Fila de pedaços a partir da hora "inicio" (só ela, se "so" for verdadeiro)
-    function montarFila(inicio, so) {
+    const vel = function () { return Number(q("au-vel").value) || 1; };
+
+    // Toca a partir da hora "inicio" até o fim (ou só ela, se "so" for verdadeiro)
+    function tocar(inicio, so) {
+      pararAudio();
       const fila = [];
-      aula.fases.forEach(function (f, i) {
-        if (i < inicio || (so && i !== inicio)) return;
-        pedacos(textoDaFase(f, i)).forEach(function (p) { fila.push({ fase: i, texto: p }); });
-      });
-      return fila;
+      aula.fases.forEach(function (f, i) { if (i >= inicio && !(so && i !== inicio)) fila.push(i); });
+      const estado = { fila: fila, pos: 0, cancelado: false, el: new Audio(), modo: "mp3", fase: null };
+      S.audio = estado;
+      estado.el.ontimeupdate = function () {
+        if (estado.cancelado || estado.modo !== "mp3" || !estado.el.duration) return;
+        q("au-status").textContent = "Ouvindo a " + (estado.fase + 1) + "ª hora · " + minutos(estado.el.currentTime) + " / " + minutos(estado.el.duration);
+      };
+      estado.el.onended = function () { proximaFase(estado); };
+      estado.el.onerror = function () {
+        // Sem a faixa MP3 (aula nova ainda sem áudio): lê esta hora com a voz do navegador
+        if (!estado.cancelado && estado.modo === "mp3" && estado.el.getAttribute("src")) falarNavegador(estado, estado.fase);
+      };
+      mostrar("tocando");
+      proximaFase(estado);
     }
 
-    function tocar(inicio, so) { iniciar(montarFila(inicio, so), 0); }
+    function proximaFase(estado) {
+      if (estado.cancelado) return;
+      if (estado.pos >= estado.fila.length) {
+        S.audio = null; mostrar("parado"); marcar(null);
+        q("au-status").textContent = "Fim do resumo. Agora é hora dos flashcards.";
+        return;
+      }
+      const i = estado.fila[estado.pos++];
+      estado.fase = i;
+      estado.modo = "mp3";
+      marcar(i);
+      q("au-status").textContent = "Ouvindo a " + (i + 1) + "ª hora…";
+      estado.el.src = urlAudio(n, aula.fases[i].hora);
+      estado.el.defaultPlaybackRate = vel();
+      estado.el.playbackRate = vel();
+      const p = estado.el.play();
+      if (p && p.catch) p.catch(function () {});   // o erro de carregamento é tratado no onerror
+    }
 
-    function iniciar(fila, pos) {
-      pararAudio();
-      const estado = { fila: fila, pos: pos, cancelado: false };
-      S.audio = estado;
+    function falarNavegador(estado, i) {
+      if (!temVozNavegador()) { proximaFase(estado); return; }
+      estado.modo = "voz";
+      const partes = pedacos(textoDaFase(aula.fases[i], i));
       const vozes = window.speechSynthesis.getVoices();
-      // Prefere as vozes mais naturais (Edge "Natural"/"Online" e as do Google) em português do Brasil
       const br = vozes.filter(function (v) { return /pt[-_]BR/i.test(v.lang); });
-      const voz = br.find(function (v) { return /natural|online/i.test(v.name); }) || br.find(function (v) { return /google/i.test(v.name); }) ||
-        br[0] || vozes.find(function (v) { return /^pt/i.test(v.lang); });
-      function proximo() {
+      const voz = br.find(function (v) { return /natural|online/i.test(v.name); }) || br.find(function (v) { return /google/i.test(v.name); }) || br[0];
+      let k = 0;
+      (function falar() {
         if (estado.cancelado) return;
-        if (estado.pos >= estado.fila.length) {
-          S.audio = null; mostrar("parado"); marcar(null);
-          q("au-status").textContent = "Fim do resumo. Agora é hora dos flashcards.";
-          return;
-        }
-        const item = estado.fila[estado.pos++];
-        marcar(item.fase);
-        q("au-status").textContent = "Ouvindo a " + (item.fase + 1) + "ª hora…";
-        const u = new SpeechSynthesisUtterance(item.texto);
+        if (k >= partes.length) { proximaFase(estado); return; }
+        const u = new SpeechSynthesisUtterance(partes[k++]);
         u.lang = "pt-BR";
         if (voz) u.voice = voz;
-        u.rate = Number(q("au-vel").value) || 1;
-        u.onend = proximo;
-        u.onerror = function (ev) { if (ev.error !== "interrupted" && ev.error !== "canceled") proximo(); };
+        u.rate = vel();
+        u.onend = falar;
+        u.onerror = function (ev) { if (ev.error !== "interrupted" && ev.error !== "canceled") falar(); };
         window.speechSynthesis.speak(u);
-      }
-      mostrar("tocando");
-      proximo();
+      })();
     }
 
     q("au-tocar").onclick = function () { tocar(0, false); };
@@ -813,14 +852,21 @@
       q("au-status").textContent = "Áudio parado.";
     };
     q("au-pausar").onclick = function () {
-      const s = window.speechSynthesis;
-      if (s.paused) { s.resume(); mostrar("tocando"); }
-      else { s.pause(); mostrar("pausado"); q("au-status").textContent = "Pausado."; }
+      const a = S.audio;
+      if (!a) return;
+      if (a.modo === "mp3") {
+        if (a.el.paused) { a.el.play(); mostrar("tocando"); }
+        else { a.el.pause(); mostrar("pausado"); q("au-status").textContent = "Pausado."; }
+      } else {
+        const s = window.speechSynthesis;
+        if (s.paused) { s.resume(); mostrar("tocando"); }
+        else { s.pause(); mostrar("pausado"); q("au-status").textContent = "Pausado."; }
+      }
     };
     q("au-vel").onchange = function () {
       try { localStorage.setItem("academy-audio-vel", q("au-vel").value); } catch (e) {}
-      // Recomeça o pedaço atual já na nova velocidade
-      if (S.audio && !window.speechSynthesis.paused) iniciar(S.audio.fila, Math.max(0, S.audio.pos - 1));
+      // No MP3 a nova velocidade vale na hora, sem deixar a voz fina; na voz do navegador, a partir da próxima frase
+      if (S.audio && S.audio.el) { S.audio.el.defaultPlaybackRate = vel(); S.audio.el.playbackRate = vel(); }
     };
     document.querySelectorAll("[data-ouvir]").forEach(function (b) {
       b.onclick = function () { tocar(Number(b.dataset.ouvir), true); };
