@@ -76,6 +76,7 @@
     if (/Password should be at least/i.test(m)) return "A senha precisa ter pelo menos 6 caracteres.";
     if (/rate limit/i.test(m)) return "Muitas tentativas seguidas. Espere alguns minutos e tente de novo.";
     if (/Failed to fetch|NetworkError/i.test(m)) return "Sem conexão com o servidor. Verifique a internet.";
+    if (/convite inválido/i.test(m)) return "Sua conta não tem um código de convite válido. Fale com a liderança para liberar o acesso.";
     return m;
   }
 
@@ -98,8 +99,15 @@
     return d;
   }
 
+  // Dia no horário de Brasília (o mesmo que o banco usa no ranking e na temporada),
+  // para a ofensiva bater com o placar mesmo em quem está em outro fuso.
+  const FMT_DIA = (function () {
+    try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }); }
+    catch (e) { return null; }
+  })();
   function diaLocal(d) {
     const x = new Date(d);
+    if (FMT_DIA) return FMT_DIA.format(x);
     return x.getFullYear() + "-" + dois(x.getMonth() + 1) + "-" + dois(x.getDate());
   }
 
@@ -333,10 +341,13 @@
         : "") +
       '<a href="#/relatorio">Relatório</a>' +
       '<a href="#/como-funciona">Como funciona</a>' +
+      "</nav>" +
+      // Pomodoro, ofensiva e perfil ficam fora do menu rolável, para aparecerem sempre (no celular, ao lado da logo)
+      '<div class="topo-chips">' +
       (S.bruto ? '<button class="pomodoro-chip" id="pomo-chip" title="Pomodoro: ' + REGRAS.pomodoroMinutos + ' minutos de foco">🍅 <span id="pomo-chip-tempo">Foco</span></button>' : "") +
       (S.bruto ? '<a href="#/" class="ofensiva-chip' + (ofensiva > 0 ? " acesa" : "") + '" title="Ofensiva: dias seguidos com 1 pomodoro e ' + REGRAS.metaDiaria + ' flashcards"><span class="fogo">🔥</span> ' + ofensiva + "</a>" : "") +
       '<a href="#/perfil" class="menu-perfil">' + esc(nome.split(" ")[0]) + "</a>" +
-      "</nav></div></header>" +
+      "</div></div></header>" +
       '<main class="conteudo">' + conteudo + "</main>";
     efeitos();
     pomoAtualizar();
@@ -436,6 +447,7 @@
         '<label>Nome completo<input name="nome" required autocomplete="name" placeholder="Como vai sair no certificado"></label>' +
         '<label>E-mail<input name="email" type="email" required autocomplete="email"></label>' +
         '<label>Senha<input name="senha" type="password" required minlength="6" autocomplete="new-password" placeholder="Mínimo de 6 caracteres"></label>' +
+        '<label>Código de convite<input name="convite" required autocomplete="off" autocapitalize="characters" placeholder="Enviado pela liderança no grupo"></label>' +
         '<button class="btn btn-primario btn-largo" type="submit">Criar conta</button>';
     } else if (modo === "esqueci") {
       form =
@@ -474,10 +486,15 @@
       botao.disabled = true;
       try {
         if (modo === "criar") {
+          // Só entra quem tem o código de convite da equipe (o banco confere de novo ao criar o perfil)
+          const convite = String(f.get("convite") || "").trim().toUpperCase();
+          const ok = await sb.rpc("academy_convite_ok", { p_codigo: convite });
+          if (ok.error) throw ok.error;
+          if (!ok.data) throw new Error("Esse código de convite não confere. Copie o código que a liderança mandou no grupo e tente de novo.");
           const r = await sb.auth.signUp({
             email: f.get("email"),
             password: f.get("senha"),
-            options: { data: { nome: String(f.get("nome")).trim() }, emailRedirectTo: urlBase() }
+            options: { data: { nome: String(f.get("nome")).trim().slice(0, 80), convite: convite }, emailRedirectTo: urlBase() }
           });
           if (r.error) throw r.error;
           if (!r.data.session) telaLogin("entrar", "Conta criada! Confirme seu e-mail pelo link que enviamos e depois entre aqui.");
@@ -1044,8 +1061,14 @@
     }
     // Toda revisão conta para a ofensiva, inclusive a revisão livre (que não mexe na agenda do card)
     const antes = calcularOfensiva();
-    sb.from(T.log).insert({ user_id: S.session.user.id, curso: CURSO.id, card_id: id, aula: n, nota: nota, livre: !!rv.livre }).then(function () {});
     const registro = { curso: CURSO.id, aula: n, reviewed_at: new Date().toISOString() };
+    const dadosLog = S.dados.log, brutoLog = S.bruto.log;
+    sb.from(T.log).insert({ user_id: S.session.user.id, curso: CURSO.id, card_id: id, aula: n, nota: nota, livre: !!rv.livre }).then(function (r) {
+      if (!r.error) return;
+      // Não foi para o banco: tira da contagem local para a ofensiva bater com o ranking
+      [dadosLog, brutoLog].forEach(function (l) { const i = l.indexOf(registro); if (i >= 0) l.splice(i, 1); });
+      toast("Esta resposta não foi salva: " + traduzErro(r.error), "erro");
+    });
     S.dados.log.push(registro);
     S.bruto.log.push(registro);
     if (!antes.batidaHoje && calcularOfensiva().batidaHoje) {
@@ -1075,6 +1098,8 @@
   document.addEventListener("keydown", function (ev) {
     const rv = S.revisao;
     if (!rv || rv.fim || ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA") return;
+    // Atalhos só valem na tela de revisão desta aula (e com a aula liberada pelo pomodoro)
+    if (!CURSO || location.hash !== rota("aula/" + rv.aula + "/revisao") || !aulaLiberada() || ev.target.closest("button, a")) return;
     if (!rv.virado && (ev.code === "Space" || ev.key === "Enter")) {
       ev.preventDefault();
       rv.virado = true;
@@ -1377,7 +1402,7 @@
       "<div><h3>Android</h3><ol><li>Abra o site no <b>Chrome</b>.</li><li>Toque nos <b>três pontinhos ⋮</b>.</li>" +
       "<li>Toque em <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>) e confirme.</li></ol></div></div>" +
       (pedidoInstalar && !emApp() ? '<p><button class="btn btn-primario" data-instalar>📲 Instalar agora</button></p>' : "") +
-      "<p class=\"muted pequeno\">No iPhone, os avisos do pomodoro (quando você sai da plataforma) funcionam melhor com o app instalado.</p></section>" +
+      "<p class=\"muted pequeno\">Avisos do pomodoro: no computador chegam na hora em que você sai da plataforma. No celular, o sistema pode segurar o aviso enquanto o app está em segundo plano, mas o tempo fora é contado do mesmo jeito e aparece quando você volta. No iPhone, os avisos só funcionam com o app instalado.</p></section>" +
       '<section class="guia-bloco"><h2>🧭 Quando você travar</h2>' +
       "<p>Se você ficar " + REGRAS.travaDiasParado + " dias sem estudar, ou com uma aula começada parada há " + REGRAS.travaDiasAula + " dias, a tela inicial pergunta: <b>O que impediu o próximo passo?</b> Sem julgamento. Cada resposta mostra na hora um caminho:</p><ul>" +
       "<li><b>⏰ Não tive tempo:</b> proteger um horário fixo na agenda (1 pomodoro por dia já basta) e rever a carga com a liderança.</li>" +
@@ -1480,7 +1505,8 @@
   // A temporada em andamento, ou a próxima, ou a última que terminou
   function temporadaAtual() {
     const hoje = hojeLocal();
-    return TEMPORADAS.find(function (t) { return dataLocal(t.fim) >= hoje; }) || TEMPORADAS[TEMPORADAS.length - 1] || null;
+    // A temporada que acabou continua aparecendo por 7 dias, para mostrar os ganhadores
+    return TEMPORADAS.find(function (t) { return dataLocal(t.fim).getTime() + 7 * DIA >= hoje.getTime(); }) || TEMPORADAS[TEMPORADAS.length - 1] || null;
   }
 
   function situacaoTemporada(t) {
@@ -1592,7 +1618,7 @@
     const c = CURSOS.find(function (x) { return x.id === t.curso; });
     const premio = t.premios.reduce(function (soma, p) { return soma + (p.valor || 0); }, 0);
     const quando = s.fase === "antes" ? "começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>"
-      : s.fase === "andamento" ? "faltam <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>" : "encerrada";
+      : s.fase === "andamento" ? (s.dias ? "faltam <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>" : "<b>último dia!</b>") : "encerrada";
     return '<a class="banner-temporada" href="#/temporada"><span class="bt-icone">🏆</span><span class="bt-texto"><b>' + esc(t.nome) + "</b> · " +
       esc(c ? c.titulo : "") + " · " + quando + (premio ? " · R$ " + premio.toLocaleString("pt-BR") + " em prêmios" : "") +
       '</span><span class="bt-ir">Ver placar →</span></a>';
@@ -1609,11 +1635,13 @@
     const s = situacaoTemporada(t);
 
     layout('<div class="painel centro"><p>Carregando a temporada…</p></div>');
+    const tela = location.hash;
     const r = await sb.rpc("academy_temporada", {
       p_curso: curso.id, p_inicio: t.inicio, p_fim: t.fim, p_versao: curso.versaoProvas,
       p_regras: Object.assign({}, PONTOS, { metaDiaria: REGRAS.metaDiaria, limiteFora: REGRAS.limiteForaMinutos * 60, notaMinima: curso.notaMinima, pesos: curso.pesos }),
       p_praticas: praticas
     });
+    if (location.hash !== tela) return;   // a pessoa já foi para outra tela
     if (r.error) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(r.error)) + "</p></div>"); return; }
 
     const eu = S.session.user.id;
@@ -1641,7 +1669,7 @@
     };
 
     const quando = s.fase === "antes" ? "Começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b> · " + dataBR(dataLocal(t.inicio))
-      : s.fase === "andamento" ? "Dia <b>" + s.dia + "</b> de " + s.total + " · faltam <b>" + s.dias + "</b> dias"
+      : s.fase === "andamento" ? "Dia <b>" + s.dia + "</b> de " + s.total + (s.dias ? " · faltam <b>" + s.dias + "</b> " + (s.dias === 1 ? "dia" : "dias") : " · <b>último dia!</b>")
       : "Temporada encerrada em " + dataBR(dataLocal(t.fim));
     const hero = '<section class="hero hero-temporada"><div>' +
       '<p class="hero-kicker">' + esc(t.nome.toLowerCase()) + " · " + esc((curso.mentor || "").toLowerCase()) + "</p>" +
@@ -1717,11 +1745,12 @@
 
   async function telaRanking() {
     layout('<div class="painel centro"><p>Carregando o ranking…</p></div>');
-    const semana = inicioDaSemana();
+    const semana = inicioDaSemana(), tela = location.hash;
     const res = await Promise.all([
       sb.rpc("academy_ranking", { p_curso: CURSO.id, p_versao: CURSO.versaoProvas, p_meta: REGRAS.metaDiaria }),
       carregarFoco(semana, new Date()).then(function (x) { return x; }, function () { return null; })
     ]);
+    if (location.hash !== tela) return;   // a pessoa já foi para outra tela
     const r = res[0], foco = res[1];
     if (r.error) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(r.error)) + "</p></div>"); return; }
     const eu = S.session.user.id;
@@ -1782,6 +1811,7 @@
   async function telaEquipe() {
     if (!S.perfil || !S.perfil.is_admin) { location.hash = "#/"; return; }
     layout('<div class="painel centro"><p>Carregando a equipe…</p></div>');
+    const tela = location.hash;
     const res = await Promise.all([
       sb.from(T.perfis).select("id,nome,email,created_at").order("nome"),
       sb.from(T.cards).select("user_id,card_id,aula,interval_days,due").eq("curso", CURSO.id),
@@ -1789,6 +1819,7 @@
       sb.from(T.provas).select("user_id,aula,tipo,nota,created_at,versao:respostas->_versao").eq("curso", CURSO.id),
       sb.from(T.travas).select("*").order("created_at", { ascending: false })
     ]);
+    if (location.hash !== tela) return;   // a pessoa já foi para outra tela
     const falhou = res.find(function (r) { return r.error; });
     if (falhou) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(falhou.error)) + "</p></div>"); return; }
 
@@ -1906,8 +1937,10 @@
     if (!botao) return;
     if (pedidoInstalar) {
       pedidoInstalar.prompt();
-      const escolha = await pedidoInstalar.userChoice;
-      if (escolha && escolha.outcome === "accepted") pedidoInstalar = null;
+      const pedido = pedidoInstalar;
+      pedidoInstalar = null;   // o navegador só deixa usar o pedido uma vez
+      const escolha = await pedido.userChoice;
+      if (escolha && escolha.outcome !== "accepted") toast("Tudo bem! Dá para instalar depois pelo menu do navegador.");
       return;
     }
     // Sem o pedido automático (iPhone ou navegador que não oferece): mostra o passo a passo
@@ -2315,7 +2348,9 @@
       if (navigator.clipboard) navigator.clipboard.writeText(textoResumo).then(ok, function () { toast("Não consegui copiar. Selecione o texto e copie.", "erro"); });
     };
     try {
+      const tela = location.hash;
       const pessoas = await carregarFoco(ini, fim);
+      if (location.hash !== tela) return;   // trocou de período ou de tela enquanto carregava
       const alvo = document.getElementById("rel-equipe"), alvo2 = document.getElementById("rel-dispersao");
       if (alvo) alvo.innerHTML = tabelaFoco(pessoas);
       if (alvo2) alvo2.innerHTML = tabelaDispersao(pessoas);
@@ -2392,24 +2427,40 @@
 
   // tipo "estudo": dentro da plataforma, o tempo fora da aba conta como disperso;
   // tipo "execucao": parte prática em outras ferramentas, o tempo fora não é medido.
-  function pomoComecar(fase, tipo) {
+  // O início do pomodoro de foco é anotado pelo servidor (academy_iniciar_pomodoro), então só dá
+  // para registrar o pomodoro depois que o tempo passou de verdade. Por isso começar precisa de internet.
+  let pomoComecando = false;
+  async function pomoComecar(fase, tipo) {
+    if (pomoComecando) return false;
     const min = fase === "pausa" ? REGRAS.pausaMinutos : REGRAS.pomodoroMinutos;
     try { pomoSom = pomoSom || new (window.AudioContext || window.webkitAudioContext)(); if (pomoSom.resume) pomoSom.resume(); } catch (e) { /* sem áudio */ }
     // Pede permissão de notificação no clique, para avisar quando a pessoa sair da plataforma
     if (fase === "foco" && tipo !== "execucao" && window.Notification && Notification.permission === "default") {
       try { Notification.requestPermission(); } catch (e) { /* navegador sem suporte */ }
     }
-    gravarJSON(POMO_CHAVE, { uid: S.session.user.id, fase: fase, tipo: fase === "foco" ? (tipo || "estudo") : null, minutos: min,
+    let inicioId = null;
+    if (fase === "foco") {
+      pomoComecando = true;
+      const r = await sb.rpc("academy_iniciar_pomodoro");
+      pomoComecando = false;
+      if (r.error) { toast("Não consegui começar o pomodoro: " + traduzErro(r.error), "erro"); return false; }
+      inicioId = r.data;
+    }
+    gravarJSON(POMO_CHAVE, { uid: S.session.user.id, fase: fase, tipo: fase === "foco" ? (tipo || "estudo") : null, minutos: min, inicioId: inicioId,
       inicio: Date.now(), fimEm: Date.now() + min * 60000, pausadoRestante: null, foraMs: 0, saidas: 0, saiuEm: null });
     pomoConfirmar = false;
     pomoAtualizar();
+    return true;
   }
 
   async function pomoSalvar(item) {
-    const r = await sb.from(T.pomodoros).insert({ minutos: item.minutos, iniciado_em: item.iniciado_em,
-      tipo: item.tipo || "estudo", fora_segundos: item.fora_segundos || 0, saidas: item.saidas || 0 });
-    if (r.error) throw r.error;
-    S.bruto.pomodoros.push({ minutos: item.minutos, iniciado_em: item.iniciado_em, concluido_em: new Date().toISOString(),
+    if (!item.inicioId) throw new Error("Pomodoro antigo demais para ser registrado.");
+    const r = await sb.rpc("academy_concluir_pomodoro", { p_inicio: item.inicioId, p_minutos: item.minutos,
+      p_tipo: item.tipo || "estudo", p_fora: item.fora_segundos || 0, p_saidas: item.saidas || 0 });
+    // Já registrado (ex.: outra aba ou nova tentativa): conta como salvo
+    if (r.error && !/já registrado/i.test(r.error.message || "")) throw r.error;
+    if (r.error) return;
+    if (S.bruto) S.bruto.pomodoros.push({ minutos: item.minutos, iniciado_em: item.iniciado_em, concluido_em: new Date().toISOString(),
       tipo: item.tipo || "estudo", fora_segundos: item.fora_segundos || 0, saidas: item.saidas || 0 });
   }
 
@@ -2420,7 +2471,14 @@
   let pomoAlertas = [];
 
   function pomoVigiado(e) { return e && e.fase === "foco" && e.tipo !== "execucao" && e.pausadoRestante == null; }
-  function pomoForaAgora() { return document.hidden || !document.hasFocus(); }
+  // Ouvindo o resumo em áudio (mesmo com a tela bloqueada) é estudo, não dispersão
+  function audioTocando() {
+    const a = S.audio;
+    if (!a || a.cancelado) return false;
+    if (a.modo === "mp3") return !!(a.el && !a.el.paused);
+    return !!(window.speechSynthesis && speechSynthesis.speaking && !speechSynthesis.paused);
+  }
+  function pomoForaAgora() { return (document.hidden || !document.hasFocus()) && !audioTocando(); }
 
   // Fecha uma saída em aberto e soma o tempo (no máximo até o fim do pomodoro)
   function pomoFecharSaida(e, agora) {
@@ -2433,12 +2491,17 @@
 
   function pomoNotificar(titulo, texto) {
     pomoBipe();
-    try {
-      if (window.Notification && Notification.permission === "granted") {
-        const n = new Notification(titulo, { body: texto, tag: "academy-pomodoro" });
-        n.onclick = function () { window.focus(); n.close(); };
-      }
-    } catch (e) { /* sem notificação */ }
+    if (!window.Notification || Notification.permission !== "granted") return;
+    const opcoes = { body: texto, tag: "academy-pomodoro", icon: "img/app/icone-192.png" };
+    // No celular o aviso precisa passar pelo service worker (sw.js); no computador vai direto
+    const direto = function () {
+      try { const n = new Notification(titulo, opcoes); n.onclick = function () { window.focus(); n.close(); }; } catch (e) { /* sem notificação */ }
+    };
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+      navigator.serviceWorker.getRegistration().then(function (reg) {
+        if (reg && reg.showNotification) reg.showNotification(titulo, opcoes).catch(direto); else direto();
+      }, direto);
+    } else direto();
   }
 
   function pomoVigiar() {
@@ -2470,7 +2533,7 @@
       gravarJSON(POMO_CHAVE, e);
       if (ms >= SAIDA_MINIMA) {
         const total = e.foraMs;
-        toast("👀 Você ficou " + tempoTxt(ms / 1000).replace("0 min", "menos de 1 min") + " fora da plataforma. Neste pomodoro: " + tempoTxt(total / 1000) +
+        toast("👀 Você ficou " + tempoFora(ms / 1000) + " fora da plataforma. Neste pomodoro: " + tempoFora(total / 1000) +
           (total >= REGRAS.limiteForaMinutos * 60000 ? " (pomodoro disperso)." : "."), total >= REGRAS.limiteForaMinutos * 60000 ? "erro" : "ok");
       }
     }
@@ -2480,22 +2543,29 @@
   window.addEventListener("focus", pomoVigiar);
 
   // Grava os pomodoros que terminaram sem internet (ou com a aba fechada) assim que der
+  let pomoEnviando = false;
   async function pomoEnviarPendentes() {
-    if (!S.session || !S.bruto) return;
-    const todos = lerJSON(POMO_PENDENTES) || [];
-    const meus = todos.filter(function (p) { return p.uid === S.session.user.id; });
+    if (!S.session || !S.bruto || pomoEnviando) return;
+    const meus = (lerJSON(POMO_PENDENTES) || []).filter(function (p) { return p.uid === S.session.user.id; });
     if (!meus.length) return;
-    const sobra = todos.filter(function (p) { return p.uid !== S.session.user.id; });
+    pomoEnviando = true;
+    const resolvidos = [];
     for (const p of meus) {
-      try { await pomoSalvar(p); }
+      try { await pomoSalvar(p); resolvidos.push(p.inicioId); }
       catch (e) {
         // Mais de 1 dia ou recusado pelo banco: descarta; erro de rede: tenta de novo depois
-        if (!/incompleto|antigo/i.test(e.message || "") && Date.now() - Date.parse(p.iniciado_em) < DIA) sobra.push(p);
+        if (/incompleto|antigo|não encontrado/i.test(e.message || "") || Date.now() - Date.parse(p.iniciado_em) >= DIA) resolvidos.push(p.inicioId);
       }
     }
-    gravarJSON(POMO_PENDENTES, sobra.length ? sobra : null);
+    // Relê a fila antes de gravar, para não perder um pomodoro que entrou enquanto enviava
+    const fila = (lerJSON(POMO_PENDENTES) || []).filter(function (p) { return resolvidos.indexOf(p.inicioId) < 0; });
+    gravarJSON(POMO_PENDENTES, fila.length ? fila : null);
+    pomoEnviando = false;
     pomoAtualizarOfensiva();
   }
+  // Tenta de novo quando a internet volta e a cada minuto
+  window.addEventListener("online", function () { pomoEnviarPendentes(); });
+  setInterval(function () { pomoEnviarPendentes(); }, 60000);
 
   async function pomoConcluir(e) {
     pomoFecharSaida(e, e.fimEm);
@@ -2505,7 +2575,7 @@
     gravarJSON(POMO_CHAVE, { uid: e.uid, fase: "feito", tipo: e.tipo, foraSeg: foraSeg, saidas: e.saidas || 0 });
     pomoAberto = true;
     pomoNotificar("🍅 Pomodoro concluído!", "Hora da pausa de " + REGRAS.pausaMinutos + " minutos.");
-    const item = { uid: e.uid, minutos: e.minutos, iniciado_em: new Date(e.inicio).toISOString(),
+    const item = { uid: e.uid, minutos: e.minutos, iniciado_em: new Date(e.inicio).toISOString(), inicioId: e.inicioId,
       tipo: e.tipo || "estudo", fora_segundos: foraSeg, saidas: e.tipo === "execucao" ? 0 : (e.saidas || 0) };
     try {
       await pomoSalvar(item);
@@ -2516,10 +2586,14 @@
         : "Pomodoro concluído! " + (o.batidaHoje ? "Ofensiva do dia garantida 🔥" : o.hoje >= o.meta ? "" : "Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva."), disperso ? "erro" : "ok");
       if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) confete();
     } catch (err) {
-      const fila = lerJSON(POMO_PENDENTES) || [];
-      fila.push(item);
-      gravarJSON(POMO_PENDENTES, fila);
-      toast("Pomodoro concluído, mas não consegui salvar agora. Vou tentar de novo sozinho.", "erro");
+      if (/incompleto|antigo|não encontrado/i.test(err.message || "")) {
+        toast("Não deu para registrar este pomodoro: " + traduzErro(err), "erro");
+      } else {
+        const fila = lerJSON(POMO_PENDENTES) || [];
+        fila.push(item);
+        gravarJSON(POMO_PENDENTES, fila);
+        toast("Pomodoro concluído, mas não consegui salvar agora. Vou tentar de novo sozinho assim que a internet voltar.", "erro");
+      }
     }
     pomoAtualizarOfensiva();
     pomoAtualizar();
@@ -2558,7 +2632,7 @@
       corpo = '<div class="pomo-feito">🍅</div><p class="pomo-texto"><b>Pomodoro concluído!</b> Levante, beba água e descanse a cabeça antes do próximo.</p>' +
         (e.tipo !== "execucao" && e.foraSeg != null
           ? '<p class="pomo-fora' + (disperso ? " disperso" : "") + '">' + (e.foraSeg < 10 ? "🎯 Sem sair da plataforma. Foco total!" :
-            "👀 " + tempoTxt(e.foraSeg).replace(/^0 min$/, "menos de 1 min") + " fora da plataforma em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") + (disperso ? " · pomodoro disperso, não conta para a ofensiva" : "")) + "</p>"
+            "👀 " + tempoFora(e.foraSeg) + " fora da plataforma em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") + (disperso ? " · pomodoro disperso, não conta para a ofensiva" : "")) + "</p>"
           : "") + contagem +
         '<div class="pomo-acoes"><button class="btn btn-primario" data-pomo="pausa">Pausa de ' + REGRAS.pausaMinutos + " min</button></div>" +
         '<p class="pomo-hoje pomo-ou">ou comece o próximo:</p>' + botoesPomodoro(true);
@@ -2590,7 +2664,8 @@
   function pomoAtualizar() {
     const e = pomoEstado();
     const ativo = e && (e.fase === "foco" || e.fase === "pausa");
-    if (ativo && e.pausadoRestante == null && Date.now() >= e.fimEm) {
+    // Só conclui depois que os dados carregaram (ao reabrir a página com o tempo já vencido)
+    if (ativo && e.pausadoRestante == null && Date.now() >= e.fimEm && S.bruto) {
       if (e.fase === "foco") { pomoConcluir(e); return; }
       gravarJSON(POMO_CHAVE, null);
       pomoBipe();
@@ -2643,13 +2718,18 @@
     const acao = b.dataset.pomo, e = pomoEstado();
     if (acao === "fechar") { pomoAberto = false; pomoConfirmar = false; }
     else if (acao === "foco" || acao === "foco-exec" || acao === "pausa") {
-      pomoComecar(acao === "pausa" ? "pausa" : "foco", acao === "foco-exec" ? "execucao" : "estudo");
-      // Começou pela tela de bloqueio da aula: entra na aula na hora
-      if (acao !== "pausa" && document.querySelector(".portao")) { pomoAberto = false; rotear(); }
+      const noPortao = !!document.querySelector(".portao");
+      b.disabled = true;
+      pomoComecar(acao === "pausa" ? "pausa" : "foco", acao === "foco-exec" ? "execucao" : "estudo").then(function (ok) {
+        b.disabled = false;
+        // Começou pela tela de bloqueio da aula: entra na aula na hora
+        if (ok && acao !== "pausa" && noPortao) { pomoAberto = false; rotear(); }
+      });
+      return;
     }
     else if (acao === "pular") gravarJSON(POMO_CHAVE, null);
-    else if (acao === "pausar" && e) { pomoFecharSaida(e, Date.now()); e.pausadoRestante = pomoRestante(e); gravarJSON(POMO_CHAVE, e); }
-    else if (acao === "retomar" && e) { e.fimEm = Date.now() + e.pausadoRestante; e.pausadoRestante = null; gravarJSON(POMO_CHAVE, e); }
+    else if (acao === "pausar" && e) { pomoFecharSaida(e, Date.now()); e.pausadoRestante = pomoRestante(e); e.pausadoEm = Date.now(); gravarJSON(POMO_CHAVE, e); }
+    else if (acao === "retomar" && e) { e.fimEm = Date.now() + e.pausadoRestante; e.pausadoRestante = null; e.pausadoEm = null; gravarJSON(POMO_CHAVE, e); }
     else if (acao === "cancelar") {
       if (!pomoConfirmar) pomoConfirmar = true;
       else { gravarJSON(POMO_CHAVE, null); pomoConfirmar = false; toast("Pomodoro cancelado."); }
@@ -2665,8 +2745,11 @@
     if (!REGRAS.aulaSoComPomodoro) return true;
     if (REGRAS.adminsSemPortao && S.perfil && S.perfil.is_admin) return true;
     const e = pomoEstado();
-    return !!(e && e.fase === "foco");
+    if (!e || e.fase !== "foco") return false;
+    // Pausa longa (mais de 10 minutos) fecha a aula até retomar o pomodoro
+    return e.pausadoRestante == null || !e.pausadoEm || Date.now() - e.pausadoEm < PAUSA_MAXIMA;
   }
+  const PAUSA_MAXIMA = 10 * 60000;
 
   function telaPortao(n) {
     const aula = CURSO.aulas.find(function (a) { return a.numero === n; });
@@ -2678,6 +2761,9 @@
       "<h1>Comece um pomodoro para entrar na aula</h1>" +
       '<p class="muted">As aulas só abrem com o foco ligado: são ' + REGRAS.pomodoroMinutos + " minutos dedicados a uma coisa só. Escolha o tipo do pomodoro:</p>" +
       (e && e.fase === "pausa" ? '<p class="aviso">Você está na pausa. Se já descansou, pode começar o próximo agora.</p>' : "") +
+      (e && e.fase === "foco" && e.pausadoRestante != null
+        ? '<p class="aviso">Seu pomodoro está pausado há mais de 10 minutos. Retome no 🍅 (no topo) para entrar, ou comece um novo.</p>' +
+          '<p><button class="btn btn-primario" data-pomodoro-abrir>🍅 Abrir o pomodoro</button></p>' : "") +
       botoesPomodoro() +
       '<ul class="portao-dicas"><li><b>🎧 Estudo:</b> resumo, áudio, flashcards e provas. Ficar fora da plataforma conta como tempo disperso no seu relatório' +
       " (avisamos depois de " + REGRAS.alertaForaSegundos + " segundos fora; com " + REGRAS.limiteForaMinutos + " minutos fora o pomodoro fica disperso e não conta para a ofensiva).</li>" +
@@ -2708,8 +2794,8 @@
           case "": return telaInicio();
           case "aula": return aulaLiberada() ? telaAula(Number(partes[3]), partes[4] || "revisao") : telaPortao(Number(partes[3]));
           case "certificado": return telaCertificado(partes[3] === "modelo");
-          case "equipe": return telaEquipe();
-          case "ranking": return telaRanking();
+          case "equipe": return await telaEquipe();
+          case "ranking": return await telaRanking();
           default: location.hash = rota("");
         }
         return;
@@ -2717,8 +2803,8 @@
       switch (partes[0]) {
         case "": return telaCursos();
         case "como-funciona": return telaComoFunciona();
-        case "temporada": return telaTemporada();
-        case "relatorio": return telaRelatorio(partes[1]);
+        case "temporada": return await telaTemporada();
+        case "relatorio": return await telaRelatorio(partes[1]);
         case "perfil": return telaPerfil();
         default: location.hash = "#/";
       }
@@ -2730,6 +2816,8 @@
 
   async function iniciar() {
     if (!configurado) return rotear();
+    // Service worker só para avisos do pomodoro e instalação do app (não guarda cache)
+    if (navigator.serviceWorker && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(function () { /* sem suporte */ });
     const r = await sb.auth.getSession();
     S.session = r.data.session;
     sb.auth.onAuthStateChange(function (evento, session) {
