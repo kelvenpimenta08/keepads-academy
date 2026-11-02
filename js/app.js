@@ -327,31 +327,51 @@
   function layout(conteudo) {
     const nome = (S.perfil && S.perfil.nome) || (S.session && S.session.user.email) || "";
     const ofensiva = S.bruto ? calcularOfensiva().dias : 0;
+    const hash = location.hash || "#/";
+    // Link do menu; "atual" marca a tela aberta (no celular o menu vira uma gaveta lateral)
+    const item = function (href, icone, texto, extra) {
+      const atual = hash === href || (href === rota("") && hash.indexOf(rota("aula/")) === 0);
+      return '<a href="' + href + '" class="' + (extra || "") + (atual ? " atual" : "") + '"><span class="menu-icone">' + icone + "</span>" + texto + "</a>";
+    };
     app.innerHTML =
       '<header class="topo"><div class="topo-in">' +
       '<a href="#/" class="marca">' + marca("escuro") + "</a>" +
-      '<nav class="menu">' +
-      (TEMPORADAS.length ? '<a href="#/temporada" class="menu-temporada">🏆 Temporada</a>' : "") +
-      '<a href="#/">Mentorias</a>' +
+      '<nav class="menu" id="menu" aria-label="Menu principal">' +
+      '<div class="menu-cabeca"><div><b>' + esc(nome.split(" ")[0] || "Menu") + '</b><span>Keep Ads Academy</span></div>' +
+      '<button class="menu-fechar" data-menu-fechar aria-label="Fechar menu">×</button></div>' +
+      (TEMPORADAS.length ? item("#/temporada", "🏆", "Temporada", "menu-temporada") : "") +
+      item("#/", "📚", "Mentorias") +
       (cursoDoMenu()
-        ? '<a href="' + rota("") + '">Aulas</a>' +
-          '<a href="' + rota("ranking") + '">Ranking</a>' +
-          '<a href="' + rota("certificado") + '">Certificado</a>' +
-          (S.perfil && S.perfil.is_admin ? '<a href="' + rota("equipe") + '">Equipe</a>' : "")
+        ? item(rota(""), "🎓", "Aulas") +
+          item(rota("ranking"), "🥇", "Ranking") +
+          item(rota("certificado"), "📜", "Certificado") +
+          (S.perfil && S.perfil.is_admin ? item(rota("equipe"), "👥", "Equipe") : "")
         : "") +
-      '<a href="#/relatorio">Relatório</a>' +
-      '<a href="#/como-funciona">Como funciona</a>' +
+      item("#/relatorio", "📊", "Relatório") +
+      item("#/como-funciona", "💡", "Como funciona") +
+      item("#/perfil", "👤", "Meu perfil", "menu-so-celular") +
       "</nav>" +
-      // Pomodoro, ofensiva e perfil ficam fora do menu rolável, para aparecerem sempre (no celular, ao lado da logo)
+      // Pomodoro, ofensiva e perfil ficam fora do menu, para aparecerem sempre (no celular, ao lado da logo)
       '<div class="topo-chips">' +
       (S.bruto ? '<button class="pomodoro-chip" id="pomo-chip" title="Pomodoro: ' + REGRAS.pomodoroMinutos + ' minutos de foco">🍅 <span id="pomo-chip-tempo">Foco</span></button>' : "") +
       (S.bruto ? '<a href="#/" class="ofensiva-chip' + (ofensiva > 0 ? " acesa" : "") + '" title="Ofensiva: dias seguidos com 1 pomodoro e ' + REGRAS.metaDiaria + ' flashcards"><span class="fogo">🔥</span> ' + ofensiva + "</a>" : "") +
       '<a href="#/perfil" class="menu-perfil">' + esc(nome.split(" ")[0]) + "</a>" +
-      "</div></div></header>" +
+      '<button class="menu-botao" data-menu-abrir aria-label="Abrir menu" aria-controls="menu"><span></span><span></span><span></span></button>' +
+      "</div></div>" +
+      '<div class="menu-fundo" data-menu-fechar></div>' +
+      "</header>" +
       '<main class="conteudo">' + conteudo + "</main>";
+    document.body.classList.remove("menu-aberto");
     efeitos();
     pomoAtualizar();
   }
+
+  // Menu lateral do celular: ☰ abre, fundo escuro, × ou escolher um link fecha
+  document.addEventListener("click", function (ev) {
+    if (ev.target.closest("[data-menu-abrir]")) { document.body.classList.add("menu-aberto"); return; }
+    if (ev.target.closest("[data-menu-fechar]") || ev.target.closest("#menu a")) document.body.classList.remove("menu-aberto");
+  });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") document.body.classList.remove("menu-aberto"); });
 
   // ---------- animações (inspiradas nos componentes do 21st.dev) ----------
   // Spotlight Card, Border Beam, Shimmer Button, contador de números e confete.
@@ -361,8 +381,10 @@
     const telaNova = S.ultimaTela !== location.hash;
     S.ultimaTela = location.hash;
     const calmo = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Brilho que segue o mouse e borda animada só com mouse: no celular deixavam a rolagem pesada
+    const comMouse = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
-    app.querySelectorAll(".curso-card, .aula-card:not(.bloqueada), .podio-lugar, .premio, .banner-temporada").forEach(function (el) {
+    if (comMouse) app.querySelectorAll(".curso-card, .aula-card:not(.bloqueada), .podio-lugar, .premio, .banner-temporada").forEach(function (el) {
       el.classList.add("spot");
       el.addEventListener("pointermove", function (ev) {
         const r = el.getBoundingClientRect();
@@ -370,7 +392,7 @@
         el.style.setProperty("--my", (ev.clientY - r.top) + "px");
       });
     });
-    app.querySelectorAll(".aula-card, .podio-lugar.lugar-1, .certificado, .premio-principal").forEach(function (el) {
+    if (comMouse) app.querySelectorAll(".aula-card, .podio-lugar.lugar-1, .certificado, .premio-principal").forEach(function (el) {
       if (!el.classList.contains("aula-card") || el.querySelector(".chip-ok")) el.classList.add("beam");
     });
     const cta = main.querySelector(".btn-primario");
@@ -2793,6 +2815,7 @@
 
   async function rotear() {
     pararAudio();   // trocar de tela interrompe o áudio do resumo
+    document.body.classList.remove("menu-aberto");
     if (!configurado) return telaConfig();
     if (S.recuperacao) return telaNovaSenha();
     if (!S.session) return telaLogin();
