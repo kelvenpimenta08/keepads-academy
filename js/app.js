@@ -558,6 +558,7 @@
       "<h1>Olá" + (primeiroNome ? ", " + esc(primeiroNome) : "") + "! Qual mentoria você vai estudar hoje?</h1>" +
       "<p>Escolha a mentoria ou o curso para ver as aulas, revisar os flashcards, executar as práticas e fazer as provas.</p></div></section>" +
       blocoTrava() +
+      blocoInstalar() +
       bannerTemporada() +
       blocoOfensiva() +
       blocoSemana() +
@@ -1369,6 +1370,14 @@
       "<p>Em <b>Relatório</b> (no menu) você vê quantas horas estudou, quantos pomodoros fez e quantos flashcards revisou nos últimos <b>7 ou 30 dias</b>, dia a dia, comparado ao período anterior. Tem um botão para copiar o resumo e mandar no WhatsApp.</p>" +
       "<p><b>Horas de estudo</b> = os minutos dos pomodoros concluídos + o tempo nos flashcards fora de um pomodoro (sem contar duas vezes). O tempo nos cards é estimado pelo intervalo entre um card e o próximo.</p>" +
       "<p>O <b>Ranking de foco</b> mostra quem fez mais pomodoros. No Ranking de cada mentoria ele aparece com a semana atual e zera toda segunda-feira.</p></section>" +
+      '<section class="guia-bloco"><h2>📲 Usar no celular como app</h2>' +
+      "<p>Dá para colocar o Keep Academy na tela inicial do celular, como um aplicativo: ele abre direto, em tela cheia, sem precisar digitar o endereço.</p>" +
+      '<div class="guia-duas"><div><h3>iPhone</h3><ol><li>Abra o site no <b>Safari</b>.</li><li>Toque em <b>Compartilhar</b> (quadrado com a seta ⬆️).</li>' +
+      "<li>Toque em <b>Adicionar à Tela de Início</b> e depois em <b>Adicionar</b>.</li></ol></div>" +
+      "<div><h3>Android</h3><ol><li>Abra o site no <b>Chrome</b>.</li><li>Toque nos <b>três pontinhos ⋮</b>.</li>" +
+      "<li>Toque em <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>) e confirme.</li></ol></div></div>" +
+      (pedidoInstalar && !emApp() ? '<p><button class="btn btn-primario" data-instalar>📲 Instalar agora</button></p>' : "") +
+      "<p class=\"muted pequeno\">No iPhone, os avisos do pomodoro (quando você sai da plataforma) funcionam melhor com o app instalado.</p></section>" +
       '<section class="guia-bloco"><h2>🧭 Quando você travar</h2>' +
       "<p>Se você ficar " + REGRAS.travaDiasParado + " dias sem estudar, ou com uma aula começada parada há " + REGRAS.travaDiasAula + " dias, a tela inicial pergunta: <b>O que impediu o próximo passo?</b> Sem julgamento. Cada resposta mostra na hora um caminho:</p><ul>" +
       "<li><b>⏰ Não tive tempo:</b> proteger um horário fixo na agenda (1 pomodoro por dia já basta) e rever a carga com a liderança.</li>" +
@@ -1848,6 +1857,64 @@
         : '<p class="muted">Ninguém travou nos últimos 30 dias. 🎉</p>') + "</section>";
   }
 
+  // ---------- app no celular (PWA) ----------
+  // O manifest.json faz o site virar "app": ícone na tela inicial e abre em tela cheia.
+  // No Android o Chrome oferece a instalação (beforeinstallprompt); no iPhone é pelo Safari: Compartilhar > Adicionar à Tela de Início.
+  const INSTALAR_FECHADO = "academy-instalar-fechado";
+  let pedidoInstalar = null;
+  window.addEventListener("beforeinstallprompt", function (ev) { ev.preventDefault(); pedidoInstalar = ev; });
+  window.addEventListener("appinstalled", function () {
+    pedidoInstalar = null;
+    toast("App instalado! Agora é só abrir o Keep Academy pela tela inicial do celular.");
+    const b = document.getElementById("instalar");
+    if (b) b.remove();
+  });
+
+  function emApp() { return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true; }
+  function ehIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
+  function ehCelular() { return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent) || ehIOS(); }
+
+  function passosInstalar() {
+    if (ehIOS()) {
+      return "<ol><li>Abra este site no <b>Safari</b> (no Chrome do iPhone não aparece a opção).</li>" +
+        "<li>Toque no botão <b>Compartilhar</b> (o quadrado com a seta para cima ⬆️, embaixo da tela).</li>" +
+        "<li>Role e toque em <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>. Pronto: o ícone do Keep Academy aparece junto dos seus apps.</li></ol>";
+    }
+    return "<ol><li>Abra este site no <b>Chrome</b>.</li><li>Toque nos <b>três pontinhos ⋮</b> (canto de cima, à direita).</li>" +
+      "<li>Toque em <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>).</li><li>Confirme em <b>Instalar</b>. Pronto: o ícone do Keep Academy aparece junto dos seus apps.</li></ol>";
+  }
+
+  // Convite na tela inicial, só no celular e só enquanto não instalou
+  function blocoInstalar() {
+    if (emApp() || !ehCelular()) return "";
+    try { if (localStorage.getItem(INSTALAR_FECHADO)) return ""; } catch (e) { /* sem storage */ }
+    return '<section class="instalar" id="instalar"><img src="img/app/icone-192.png" alt="" class="instalar-icone">' +
+      '<div class="instalar-texto"><b>Instale o Keep Academy no celular</b><span>Fica na tela inicial como um app e abre direto, em tela cheia.</span></div>' +
+      '<div class="instalar-acoes"><button class="btn btn-primario" data-instalar>📲 Instalar</button>' +
+      '<button class="instalar-fechar" data-instalar-fechar aria-label="Fechar">×</button></div>' +
+      '<div class="instalar-passos" hidden>' + passosInstalar() + "</div></section>";
+  }
+
+  document.addEventListener("click", async function (ev) {
+    if (ev.target.closest("[data-instalar-fechar]")) {
+      try { localStorage.setItem(INSTALAR_FECHADO, "1"); } catch (e) { /* sem storage */ }
+      const b = document.getElementById("instalar");
+      if (b) b.remove();
+      return;
+    }
+    const botao = ev.target.closest("[data-instalar]");
+    if (!botao) return;
+    if (pedidoInstalar) {
+      pedidoInstalar.prompt();
+      const escolha = await pedidoInstalar.userChoice;
+      if (escolha && escolha.outcome === "accepted") pedidoInstalar = null;
+      return;
+    }
+    // Sem o pedido automático (iPhone ou navegador que não oferece): mostra o passo a passo
+    const passos = (botao.closest(".instalar, .guia-bloco, .painel") || document).querySelector(".instalar-passos");
+    if (passos) passos.hidden = !passos.hidden;
+  });
+
   // ---------- feedback para quem travou ----------
   // Quando a pessoa fica REGRAS.travaDiasParado dias sem estudar, ou com uma aula começada e não
   // aprovada parada há REGRAS.travaDiasAula dias, a tela inicial pergunta "O que impediu o próximo
@@ -2268,6 +2335,8 @@
       '<form id="form-perfil"><label>Nome completo (sai no certificado)<input name="nome" required value="' + esc(S.perfil.nome) + '"></label>' +
       '<label>E-mail<input value="' + esc(S.session.user.email) + '" disabled></label>' +
       '<button class="btn btn-primario" type="submit">Salvar</button></form>' +
+      (emApp() ? "" : '<hr><h3>📲 App no celular</h3><p class="muted pequeno">Coloque o Keep Academy na tela inicial do celular, como um aplicativo.</p>' +
+        '<button class="btn btn-secundario" data-instalar>Instalar no celular</button><div class="instalar-passos" hidden>' + passosInstalar() + "</div>") +
       '<hr><button class="btn btn-secundario" id="sair">Sair da conta</button></div>'
     );
     document.getElementById("form-perfil").onsubmit = async function (ev) {
