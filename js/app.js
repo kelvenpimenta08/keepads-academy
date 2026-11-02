@@ -397,6 +397,12 @@
     });
     const cta = main.querySelector(".btn-primario");
     if (cta) cta.classList.add("brilho");
+    // No celular as abas da aula rolam de lado: a aba aberta sempre aparece
+    const abaAtiva = main.querySelector(".abas a.ativo");
+    if (abaAtiva) {
+      const trilho = abaAtiva.parentElement;
+      trilho.scrollLeft = Math.max(0, abaAtiva.getBoundingClientRect().left - trilho.getBoundingClientRect().left + trilho.scrollLeft - 24);
+    }
 
     const festa = main.querySelector("[data-festa]");
     if (festa && !calmo) confete();
@@ -1708,7 +1714,7 @@
       return l.xp > 0;
     };
 
-    const quando = s.fase === "antes" ? "Começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b> · " + dataBR(dataLocal(t.inicio))
+    const quando = s.fase === "antes" ? "Começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>"
       : s.fase === "andamento" ? "Dia <b>" + s.dia + "</b> de " + s.total + (s.dias ? " · faltam <b>" + s.dias + "</b> " + (s.dias === 1 ? "dia" : "dias") : " · <b>último dia!</b>")
       : "Temporada encerrada em " + dataBR(dataLocal(t.fim));
     const hero = '<section class="hero hero-temporada"><div>' +
@@ -2747,6 +2753,10 @@
   }
 
   document.addEventListener("click", function (ev) {
+    // No celular, tocar fora do painel do pomodoro fecha o painel
+    if (pomoAberto && window.innerWidth <= 760 && !ev.target.closest("#pomo-painel, #pomo-chip, [data-pomodoro-abrir], [data-pomo]")) {
+      pomoAberto = false; pomoConfirmar = false; pomoAtualizar();
+    }
     if (ev.target.closest("#pomo-chip, [data-pomodoro-abrir]")) {
       pomoAberto = !ev.target.closest("#pomo-chip") || !pomoAberto;
       pomoConfirmar = false;
