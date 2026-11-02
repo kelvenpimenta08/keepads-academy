@@ -91,9 +91,11 @@ input:focus { outline: 2px solid var(--verde); outline-offset: 1px; border-color
 .senha-campo { position: relative; display: block; }
 .senha-campo input { padding-right: 3rem; }
 .senha-olho {
-  position: absolute; right: .35rem; top: calc(50% + .15rem); transform: translateY(-50%);
-  background: none; border: 0; padding: .4rem; border-radius: 8px; line-height: 0; cursor: pointer; color: var(--muted);
+  position: absolute; right: .25rem; top: calc(50% + .15rem); transform: translateY(-50%);
+  background: none; border: 0; padding: .55rem; border-radius: 8px; line-height: 0; cursor: pointer; color: var(--muted);
 }
+/* Atalhos de teclado (espaço, 1 a 4) não fazem sentido em tela de toque */
+@media (hover: none) { kbd { display: none; } }
 .senha-olho:hover { color: var(--texto); background: var(--fundo); }
 .senha-olho:focus-visible { outline: 2px solid var(--verde); }
 input:disabled { background: #f1f4f3; color: var(--muted); }
@@ -539,6 +541,26 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .curso-info { padding: 1rem 1.1rem 1.1rem; }
   .curso-info h2 { font-size: 1.2rem; }
   .grade-cursos { gap: .9rem; }
+
+  /* Revisão do mobile: alvos de toque de pelo menos 38 a 44px e nenhum texto abaixo de ~12px */
+  .pomodoro-chip, .ofensiva-chip { min-height: 38px; display: inline-flex; align-items: center; gap: .3rem; }
+  .instalar-fechar { width: 40px; height: 40px; font-size: 1.6rem; }
+  .chip { font-size: .78rem; padding: .2rem .65rem; }
+  .selo b { font-size: .88rem; }
+  .selo span { font-size: .78rem; }
+  .fc-rotulo, .tarefa-num { font-size: .78rem; }
+  .graf-dia small { font-size: .75rem; }
+  /* No iPhone, campo com letra menor que 16px faz a tela dar zoom ao tocar */
+  input, select, textarea { font-size: 16px !important; }
+  /* Cabeçalho da aula mais curto: a descrição fica em 3 linhas */
+  .aula-cabeca { gap: .8rem; margin-bottom: .9rem; }
+  .aula-cabeca h1 { font-size: 1.25rem; }
+  .aula-cabeca p { font-size: .9rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .aula-cabeca-nota { padding: .6rem 1rem; min-width: 0; }
+  .aula-cabeca-nota b { font-size: 1.5rem; }
+  /* Abas da aula: mais compactas e com um esmaecido na ponta, mostrando que dá para deslizar */
+  .abas { -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
+  .abas a { padding: .7rem .75rem; font-size: .88rem; }
   .guia-botoes { grid-template-columns: 1fr; }
   .grade-cursos { grid-template-columns: 1fr; }
   .ofensiva { grid-template-columns: 1fr; padding: 1rem; }
@@ -795,4 +817,21 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
     0%, 100% { transform: rotate(-4deg) scale(1); }
     50% { transform: rotate(4deg) scale(1.1); }
   }
+}
+
+/* Celular: ajustes finais. Ficam no fim do arquivo para valer por cima das regras de cada tela */
+@media (max-width: 760px) {
+  .tarefa-relato { font-size: 16px !important; }
+  .selos .selo b { font-size: .88rem; }
+  .selos .selo span { font-size: .78rem; }
+  /* Revisão: os botões de resposta (e o de virar o card) ficam presos no rodapé, sempre ao alcance do polegar */
+  .notas, .revisao > #rv-virar, .revisao .btn-virar {
+    position: sticky; bottom: 0; z-index: 5;
+    background: linear-gradient(180deg, rgba(245, 245, 245, 0), var(--fundo) 22%); padding: .9rem 0 calc(.6rem + env(safe-area-inset-bottom));
+  }
+  .notas { grid-template-columns: repeat(4, 1fr) !important; gap: .4rem; }
+  .nota-btn { padding: .7rem .2rem; }
+  .flashcard { padding: 1.2rem; min-height: 12rem; }
+  .fc-texto { font-size: 1.08rem; }
+  .fc-divisor { margin: 1rem 0; }
 }
