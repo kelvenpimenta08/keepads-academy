@@ -7,6 +7,8 @@
   // Regras gerais do Academy (valem para todos os cursos)
   window.ACADEMY_REGRAS = {
     metaDiaria: 5,          // flashcards revisados no dia para contar na ofensiva (o ranking usa o mesmo número)
+    pomodoroMinutos: 30,    // bloco de foco; a ofensiva do dia exige pelo menos 1 pomodoro concluído (o banco exige 30 min ou mais)
+    pausaMinutos: 5,        // pausa sugerida depois de cada pomodoro
     refazerProvaDias: 30    // dias de espera para refazer uma prova (o banco também garante essa regra)
   };
 
