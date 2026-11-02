@@ -677,7 +677,7 @@
     const fases = aula.fases.map(function (f, i) {
       const lista = function (itens) { return "<ul>" + (itens || []).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul>"; };
       return '<details class="fase"' + (i === 0 ? " open" : "") + ">" +
-        '<summary><span class="fase-hora">' + (ordinais[i] || (f.hora + "ª")) + " hora</span>" +
+        '<summary><span class="fase-hora">' + esc(f.rotulo || ((ordinais[i] || (f.hora + "ª")) + " hora")) + "</span>" +
         '<span class="fase-titulo">' + esc(f.titulo) + '</span><span class="fase-tempo">' + esc(f.tempo || "") + "</span></summary>" +
         '<div class="fase-corpo">' +
         (f.ideia ? '<p class="fase-ideia">' + esc(f.ideia) + "</p>" : "") +
@@ -686,7 +686,7 @@
         '<div class="fase-bloco fase-executar"><h3>🛠️ O que executar</h3>' + lista(f.executar) + "</div>" +
         "</div>" +
         (f.frase ? '<blockquote class="fase-frase">“' + esc(f.frase) + "”</blockquote>" : "") +
-        (temAudio() ? '<button class="btn btn-secundario btn-ouvir-hora" data-ouvir="' + i + '">🔊 Ouvir esta hora</button>' : "") +
+        (temAudio() ? '<button class="btn btn-secundario btn-ouvir-hora" data-ouvir="' + i + '">🔊 Ouvir esta ' + unidadeFase(f) + "</button>" : "") +
         "</div></details>";
     }).join("");
     const velocidades = ["1", "1.25", "1.5", "1.75"];
@@ -702,7 +702,7 @@
         '<span class="au-status muted" id="au-status">Ouça no carro, na academia ou com o celular no bolso.</span></div>'
       : "";
     return '<div class="painel resumo-aula">' +
-      '<p class="muted">A aula dividida em ' + aula.fases.length + " partes: em cada hora, o que você precisa <b>aprender</b> e o que precisa <b>executar</b>. " +
+      '<p class="muted">A aula dividida em ' + aula.fases.length + " partes: em cada " + unidadeFase(aula.fases[0]) + ", o que você precisa <b>aprender</b> e o que precisa <b>executar</b>. " +
       "Leia o resumo, passe pelo mapa mental e depois vá para os flashcards: é na revisão que o conteúdo fixa.</p>" +
       player +
       fases +
@@ -723,7 +723,13 @@
     return s ? s.src.replace(/js\/app\.js.*$/, "") : "";
   })();
 
-  function urlAudio(n, hora) { return BASE_SITE + "audio/resumos/aula-" + dois(n) + "-hora-" + hora + ".mp3"; }
+  // Arquivos de áudio: "aula-05-hora-1.mp3"; mentorias com prefixo (CURSO.prefixoArquivos), ex.: "ds-aula-01-hora-1.mp3"
+  function urlAudio(n, hora) {
+    return BASE_SITE + "audio/resumos/" + (CURSO.prefixoArquivos || "") + "aula-" + dois(n) + "-hora-" + hora + ".mp3";
+  }
+
+  // Aulas curtas são divididas em partes (campo "rotulo": "1ª parte"); as de 3 horas, por hora
+  function unidadeFase(f) { return f && f.rotulo && /parte/i.test(f.rotulo) ? "parte" : "hora"; }
 
   function lerVelocidade() {
     try { return localStorage.getItem("academy-audio-vel") || "1"; } catch (e) { return "1"; }
@@ -747,7 +753,7 @@
   function textoDaFase(f, i) {
     const ordinal = ["Primeira", "Segunda", "Terceira", "Quarta"][i] || "Próxima";
     const frase = function (t) { t = String(t || "").trim(); return t && !/[.!?:]$/.test(t) ? t + "." : t; };
-    return [ordinal + " hora: " + frase(f.titulo), frase(f.ideia),
+    return [ordinal + " " + unidadeFase(f) + ": " + frase(f.titulo), frase(f.ideia),
       "O que aprender."].concat((f.aprender || []).map(frase))
       .concat(["O que executar."], (f.executar || []).map(frase))
       .concat(f.frase ? ["Frase da aula: " + frase(f.frase)] : []).join(" ");
@@ -795,7 +801,7 @@
       S.audio = estado;
       estado.el.ontimeupdate = function () {
         if (estado.cancelado || estado.modo !== "mp3" || !estado.el.duration) return;
-        q("au-status").textContent = "Ouvindo a " + (estado.fase + 1) + "ª hora · " + minutos(estado.el.currentTime) + " / " + minutos(estado.el.duration);
+        q("au-status").textContent = "Ouvindo a " + (estado.fase + 1) + "ª " + unidadeFase(aula.fases[estado.fase]) + " · " + minutos(estado.el.currentTime) + " / " + minutos(estado.el.duration);
       };
       estado.el.onended = function () { proximaFase(estado); };
       estado.el.onerror = function () {
@@ -817,7 +823,7 @@
       estado.fase = i;
       estado.modo = "mp3";
       marcar(i);
-      q("au-status").textContent = "Ouvindo a " + (i + 1) + "ª hora…";
+      q("au-status").textContent = "Ouvindo a " + (i + 1) + "ª " + unidadeFase(aula.fases[i]) + "…";
       estado.el.src = urlAudio(n, aula.fases[i].hora);
       estado.el.defaultPlaybackRate = vel();
       estado.el.playbackRate = vel();
