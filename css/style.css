@@ -196,6 +196,24 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .semana-titulo { font-weight: 700; }
 .semana-ver { margin-left: auto; font-weight: 700; color: var(--verde-escuro); }
 
+/* App no celular */
+.instalar {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .9rem; background: var(--preto); color: #fff;
+  border-radius: var(--raio); padding: .9rem 1rem; margin-bottom: 1.5rem;
+}
+.instalar-icone { width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .12); }
+.instalar-texto { display: grid; gap: .1rem; }
+.instalar-texto span { font-size: .85rem; color: rgba(255, 255, 255, .7); }
+.instalar-acoes { display: flex; align-items: center; gap: .3rem; }
+.instalar-acoes .btn { padding: .55rem .9rem; font-size: .9rem; }
+.instalar-fechar { background: none; border: 0; color: rgba(255, 255, 255, .6); font-size: 1.5rem; line-height: 1; cursor: pointer; padding: 0 .2rem; }
+.instalar-passos { grid-column: 1 / -1; background: rgba(255, 255, 255, .07); border-radius: 10px; padding: .4rem 1rem; font-size: .92rem; }
+.instalar-passos ol { margin: .4rem 0; padding-left: 1.2rem; }
+.instalar-passos li { margin-bottom: .3rem; }
+.painel .instalar-passos { background: var(--fundo); margin-top: .8rem; }
+.guia-duas { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.guia-duas h3 { margin: .4rem 0 0; }
+
 /* Feedback para quem travou */
 .trava { border-left: 4px solid var(--verde); margin-bottom: 1.5rem; }
 .trava-cabeca { display: flex; gap: 1rem; align-items: flex-start; }
@@ -475,6 +493,10 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .pomo-painel { top: auto; bottom: 16px; }
   .relatorio-grade { grid-template-columns: 1fr; }
   .trava-opcoes { grid-template-columns: 1fr; }
+  .guia-duas { grid-template-columns: 1fr; }
+  .instalar { grid-template-columns: auto 1fr; }
+  .instalar-acoes { grid-column: 1 / -1; }
+  .instalar-acoes .btn { flex: 1; }
   .trava-icone { display: none; }
   .portao { padding: 1.4rem 1rem; }
   .portao .pomo-tipos { grid-template-columns: 1fr; }
