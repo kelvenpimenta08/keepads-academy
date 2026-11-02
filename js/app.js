@@ -324,6 +324,7 @@
           '<a href="' + rota("certificado") + '">Certificado</a>' +
           (S.perfil && S.perfil.is_admin ? '<a href="' + rota("equipe") + '">Equipe</a>' : "")
         : "") +
+      '<a href="#/relatorio">Relatório</a>' +
       '<a href="#/como-funciona">Como funciona</a>' +
       (S.bruto ? '<button class="pomodoro-chip" id="pomo-chip" title="Pomodoro: ' + REGRAS.pomodoroMinutos + ' minutos de foco">🍅 <span id="pomo-chip-tempo">Foco</span></button>' : "") +
       (S.bruto ? '<a href="#/" class="ofensiva-chip' + (ofensiva > 0 ? " acesa" : "") + '" title="Ofensiva: dias seguidos com 1 pomodoro e ' + REGRAS.metaDiaria + ' flashcards"><span class="fogo">🔥</span> ' + ofensiva + "</a>" : "") +
@@ -551,6 +552,7 @@
       "<p>Escolha a mentoria ou o curso para ver as aulas, revisar os flashcards, executar as práticas e fazer as provas.</p></div></section>" +
       bannerTemporada() +
       blocoOfensiva() +
+      blocoSemana() +
       '<section class="grade-cursos">' + cards + "</section>"
     );
   }
@@ -1354,6 +1356,10 @@
       "<li>Antes de começar: celular longe, uma aba aberta e um objetivo claro (ex.: \"revisar os cards da Aula 3\" ou \"executar a parte prática 2\").</li>" +
       "<li>Pode pausar se for interrompido. Se cancelar, ele não conta. Só o pomodoro que chega até o fim é registrado.</li>" +
       "<li>Pode fazer quantos quiser por dia, mas para a ofensiva basta 1.</li></ul></section>" +
+      '<section class="guia-bloco"><h2>📊 Relatório de estudo</h2>' +
+      "<p>Em <b>Relatório</b> (no menu) você vê quantas horas estudou, quantos pomodoros fez e quantos flashcards revisou nos últimos <b>7 ou 30 dias</b>, dia a dia, comparado ao período anterior. Tem um botão para copiar o resumo e mandar no WhatsApp.</p>" +
+      "<p><b>Horas de estudo</b> = os minutos dos pomodoros concluídos + o tempo nos flashcards fora de um pomodoro (sem contar duas vezes). O tempo nos cards é estimado pelo intervalo entre um card e o próximo.</p>" +
+      "<p>O <b>Ranking de foco</b> mostra quem fez mais pomodoros. No Ranking de cada mentoria ele aparece com a semana atual e zera toda segunda-feira.</p></section>" +
 
       '<section class="guia-bloco"><h2>🏆 Ranking</h2>' +
       "<p>Cada mentoria tem o seu ranking, só com as pessoas daquela mentoria. A posição é definida pela <b>média das provas</b> (a melhor nota de cada prova). Em caso de empate, ganha quem fez mais provas e depois quem tem a maior ofensiva. Também tem um ranking separado só das maiores ofensivas.</p>" +
@@ -1678,7 +1684,12 @@
 
   async function telaRanking() {
     layout('<div class="painel centro"><p>Carregando o ranking…</p></div>');
-    const r = await sb.rpc("academy_ranking", { p_curso: CURSO.id, p_versao: CURSO.versaoProvas, p_meta: REGRAS.metaDiaria });
+    const semana = inicioDaSemana();
+    const res = await Promise.all([
+      sb.rpc("academy_ranking", { p_curso: CURSO.id, p_versao: CURSO.versaoProvas, p_meta: REGRAS.metaDiaria }),
+      carregarFoco(semana, new Date()).then(function (x) { return x; }, function () { return null; })
+    ]);
+    const r = res[0], foco = res[1];
     if (r.error) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(r.error)) + "</p></div>"); return; }
     const eu = S.session.user.id;
     const totalProvas = aulasDisponiveis(CURSO).length * 2;
@@ -1720,6 +1731,10 @@
         : '<p class="muted">Ninguém fez prova ainda. As provas liberam depois de uma semana de flashcards.</p>') +
       (semProva.length ? '<p class="muted pequeno">Ainda sem prova: ' + semProva.map(function (p) { return esc(p.nome); }).join(", ") + ".</p>" : "") +
       "</section>" +
+      '<section class="painel"><h2>🍅 Ranking de foco da semana</h2>' +
+      '<p class="muted pequeno">Quem fez mais pomodoros desde segunda-feira (' + dataBR(semana) + "), em todas as mentorias. Zera toda segunda.</p>" +
+      (foco ? tabelaFoco(foco, 10) : '<p class="muted">Não consegui carregar o ranking de foco agora.</p>') +
+      '<p><a href="#/relatorio">Ver meu relatório de estudo →</a></p></section>' +
       '<section class="painel"><h2>🔥 Maiores ofensivas</h2>' +
       (porOfensiva.length
         ? '<div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr><th>#</th><th>Pessoa</th><th>Ofensiva</th></tr></thead><tbody>' +
@@ -1773,6 +1788,173 @@
       (disponiveis.length ? "" : '<p class="aviso">Esta mentoria ainda não tem aulas liberadas.</p>') +
       '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th>' + cab + "<th>Aprovadas</th><th>Última prova</th></tr></thead><tbody>" + corpo + "</tbody></table></div>"
     );
+  }
+
+  // ---------- relatório de estudo ----------
+  // Horas de estudo = minutos de foco dos pomodoros + tempo nos flashcards fora de um pomodoro.
+  // O tempo nos cards é estimado pelo intervalo entre um card e o próximo (até 5 min; acima disso
+  // é uma sessão nova e o card conta 30 s). O banco faz a mesma conta em academy_foco (supabase/relatorio.sql).
+  const PAUSA_SESSAO = 5 * 60000, CARD_SOLTO = 30000;
+
+  function inicioDoDia(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+  function somarDias(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function inicioDaSemana() { const h = inicioDoDia(new Date()); return somarDias(h, -((h.getDay() + 6) % 7)); }   // segunda-feira
+
+  function tempoTxt(seg) {
+    const min = Math.round(seg / 60);
+    if (min < 60) return min + " min";
+    return Math.floor(min / 60) + "h" + (min % 60 ? dois(min % 60) : "");
+  }
+
+  function estudoNoPeriodo(ini, fim) {
+    const dentro = function (t) { return t >= ini.getTime() && t < fim.getTime(); };
+    const poms = ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) { return dentro(Date.parse(p.concluido_em)); });
+    const todos = ((S.bruto && S.bruto.pomodoros) || []).map(function (p) { return [Date.parse(p.iniciado_em), Date.parse(p.concluido_em)]; });
+    const revs = ((S.bruto && S.bruto.log) || []).map(function (l) { return Date.parse(l.reviewed_at); }).filter(dentro).sort(function (a, b) { return a - b; });
+    const porDia = {};
+    const dia = function (t) { const k = diaLocal(new Date(t)); return porDia[k] || (porDia[k] = { foco: 0, extra: 0, cards: 0, pomodoros: 0 }); };
+    let minFoco = 0, segCards = 0, segExtra = 0;
+    poms.forEach(function (p) { const d = dia(Date.parse(p.concluido_em)); d.foco += p.minutos; d.pomodoros++; minFoco += p.minutos; });
+    revs.forEach(function (t, i) {
+      const gap = i ? t - revs[i - 1] : Infinity;
+      const s = (gap <= PAUSA_SESSAO ? gap : CARD_SOLTO) / 1000;
+      const noFoco = todos.some(function (p) { return t >= p[0] && t <= p[1]; });
+      const d = dia(t);
+      d.cards++;
+      segCards += s;
+      if (!noFoco) { segExtra += s; d.extra += s; }
+    });
+    return {
+      pomodoros: poms.length, minFoco: minFoco, cards: revs.length, segCards: segCards, segExtra: segExtra,
+      segTotal: minFoco * 60 + segExtra, dias: Object.keys(porDia).length, porDia: porDia
+    };
+  }
+
+  async function carregarFoco(ini, fim) {
+    const r = await sb.rpc("academy_foco", { p_inicio: ini.toISOString(), p_fim: fim.toISOString() });
+    if (r.error) throw r.error;
+    return (r.data || []).map(function (p) {
+      return { id: p.user_id, nome: p.nome || "(sem nome)", pomodoros: p.pomodoros, minFoco: p.minutos_foco, cards: p.cards,
+        segCards: p.segundos_cards, segTotal: p.minutos_foco * 60 + p.segundos_extra, dias: p.dias };
+    }).sort(function (a, b) { return b.pomodoros - a.pomodoros || b.segTotal - a.segTotal || b.cards - a.cards; });
+  }
+
+  // Ranking de foco: quem fez mais pomodoros no período (empate: mais horas de estudo)
+  function tabelaFoco(pessoas, limite) {
+    const eu = S.session.user.id;
+    const ativos = pessoas.filter(function (p) { return p.pomodoros || p.cards; });
+    const parados = pessoas.filter(function (p) { return !p.pomodoros && !p.cards; });
+    const lista = limite ? ativos.slice(0, limite) : ativos;
+    const medalhas = ["🥇", "🥈", "🥉"];
+    if (!lista.length) return '<p class="muted">Ninguém estudou neste período ainda. Comece um 🍅 e saia na frente.</p>';
+    return '<div class="tabela-rolagem sem-sombra"><table class="tabela tabela-foco"><thead><tr><th>#</th><th>Pessoa</th><th>Pomodoros</th><th>Horas de estudo</th><th>Cards</th><th>Dias</th></tr></thead><tbody>' +
+      lista.map(function (p, i) {
+        return '<tr class="' + (p.id === eu ? "voce" : "") + '"><td><b>' + (medalhas[i] || (i + 1) + "º") + "</b></td><td>" + esc(p.nome) +
+          (p.id === eu ? ' <span class="chip chip-ok">você</span>' : "") + "</td><td><b>🍅 " + p.pomodoros + "</b></td><td>" + tempoTxt(p.segTotal) +
+          "</td><td>" + p.cards + "</td><td>" + p.dias + "</td></tr>";
+      }).join("") + "</tbody></table></div>" +
+      (!limite && parados.length ? '<p class="muted pequeno">Ainda sem estudo no período: ' + parados.map(function (p) { return esc(p.nome); }).join(", ") + ".</p>" : "");
+  }
+
+  // Resumo curto dos últimos 7 dias na tela inicial
+  function blocoSemana() {
+    if (!S.bruto) return "";
+    const e = estudoNoPeriodo(somarDias(inicioDoDia(new Date()), -6), new Date());
+    return '<a class="semana-resumo" href="#/relatorio">' +
+      '<span class="semana-titulo">📊 Seus últimos 7 dias</span>' +
+      "<span><b>" + tempoTxt(e.segTotal) + "</b> de estudo</span>" +
+      "<span><b>🍅 " + e.pomodoros + "</b> pomodoro" + (e.pomodoros === 1 ? "" : "s") + "</span>" +
+      "<span><b>" + e.cards + "</b> cards</span>" +
+      '<span class="semana-ver">Ver relatório →</span></a>';
+  }
+
+  function variacao(agora, antes) {
+    if (!antes && !agora) return "";
+    if (!antes) return '<span class="var sobe">novo</span>';
+    const p = Math.round((agora - antes) / antes * 100);
+    if (p === 0) return '<span class="var">igual</span>';
+    return '<span class="var ' + (p > 0 ? "sobe" : "desce") + '">' + (p > 0 ? "▲ +" : "▼ ") + p + "%</span>";
+  }
+
+  async function telaRelatorio(param) {
+    const dias = param === "30" ? 30 : 7;
+    const fim = new Date(), ini = somarDias(inicioDoDia(fim), -(dias - 1));
+    const antesIni = somarDias(ini, -dias);
+    const e = estudoNoPeriodo(ini, fim), a = estudoNoPeriodo(antesIni, ini);
+    const primeiroNome = ((S.perfil && S.perfil.nome) || "").split(" ")[0];
+
+    // Gráfico por dia: minutos de foco (pomodoro) + minutos nos cards fora do pomodoro
+    const colunas = [];
+    for (let i = 0; i < dias; i++) colunas.push(somarDias(ini, i));
+    const maxMin = Math.max(30, Math.max.apply(null, colunas.map(function (d) { const x = e.porDia[diaLocal(d)]; return x ? x.foco + x.extra / 60 : 0; })));
+    const semanaCurta = ["D", "S", "T", "Q", "Q", "S", "S"];
+    const grafico = colunas.map(function (d, i) {
+      const x = e.porDia[diaLocal(d)] || { foco: 0, extra: 0, cards: 0, pomodoros: 0 };
+      const hf = x.foco / maxMin * 100, he = x.extra / 60 / maxMin * 100;
+      const rotulo = dias === 7 ? semanaCurta[d.getDay()] : (i % 5 === 0 || i === dias - 1 ? d.getDate() : "");
+      return '<div class="graf-dia" title="' + dataBR(d) + ": " + x.pomodoros + " pomodoro(s), " + tempoTxt(x.foco * 60 + x.extra) + " de estudo, " + x.cards + ' cards">' +
+        '<div class="graf-barra"><span class="graf-cards" style="height:' + he + '%"></span><span class="graf-foco" style="height:' + hf + '%"></span></div>' +
+        "<small>" + rotulo + "</small></div>";
+    }).join("");
+
+    const periodo = dias === 7 ? "nos últimos 7 dias" : "nos últimos 30 dias";
+    const textoResumo = "📊 Meu relatório Keep Ads Academy (" + periodo + ")\n" +
+      "⏱️ " + tempoTxt(e.segTotal) + " de estudo\n" +
+      "🍅 " + e.pomodoros + " pomodoro" + (e.pomodoros === 1 ? "" : "s") + " (" + tempoTxt(e.minFoco * 60) + " de foco)\n" +
+      "🧠 " + e.cards + " flashcards revisados\n" +
+      "📅 " + e.dias + " de " + dias + " dias estudando\n" +
+      "🔥 Ofensiva atual: " + calcularOfensiva().dias + " dia(s)";
+
+    const frase = !e.segTotal
+      ? "Você ainda não estudou " + periodo + ". Que tal começar agora com um 🍅 de " + REGRAS.pomodoroMinutos + " minutos?"
+      : (primeiroNome ? esc(primeiroNome) + ", n" : "N") + periodo.slice(1) + " você estudou <b>" + tempoTxt(e.segTotal) + "</b>, fez <b>" + e.pomodoros +
+        " pomodoro" + (e.pomodoros === 1 ? "" : "s") + "</b> e revisou <b>" + e.cards + " flashcards</b>, em " + e.dias + " de " + dias + " dias.";
+
+    layout(
+      '<p class="hero-kicker">relatório de estudo</p>' +
+      '<div class="relatorio-topo"><h1>Seu relatório</h1><div class="abas-auth relatorio-periodo">' +
+      '<button data-periodo="7" class="' + (dias === 7 ? "ativo" : "") + '">7 dias</button>' +
+      '<button data-periodo="30" class="' + (dias === 30 ? "ativo" : "") + '">30 dias</button></div></div>' +
+      '<section class="hero relatorio-hero"><div><p>' + frase + "</p></div>" +
+      '<div class="hero-stats">' +
+      "<div><b>" + tempoTxt(e.segTotal) + "</b><span>de estudo</span>" + variacao(e.segTotal, a.segTotal) + "</div>" +
+      "<div><b>" + e.pomodoros + "</b><span>pomodoros</span>" + variacao(e.pomodoros, a.pomodoros) + "</div>" +
+      "<div><b>" + e.cards + "</b><span>flashcards</span>" + variacao(e.cards, a.cards) + "</div>" +
+      "<div><b>" + e.dias + "/" + dias + "</b><span>dias estudando</span></div></div></section>" +
+      '<div class="relatorio-grade">' +
+      '<section class="painel"><h2>Estudo por dia</h2>' +
+      '<div class="graf' + (dias === 30 ? " graf-30" : "") + '">' + grafico + "</div>" +
+      '<p class="graf-legenda"><span><i class="graf-foco"></i>Foco no pomodoro</span><span><i class="graf-cards"></i>Cards fora do pomodoro</span></p>' +
+      '<ul class="relatorio-detalhe">' +
+      "<li><span>Tempo de foco (pomodoros)</span><b>" + tempoTxt(e.minFoco * 60) + "</b></li>" +
+      "<li><span>Tempo nos flashcards</span><b>" + tempoTxt(e.segCards) + "</b></li>" +
+      "<li><span>Média por dia estudado</span><b>" + (e.dias ? tempoTxt(e.segTotal / e.dias) : "—") + "</b></li>" +
+      "<li><span>Comparado aos " + dias + " dias anteriores</span><b>" + tempoTxt(a.segTotal) + " antes</b></li></ul></section>" +
+      '<section class="painel"><h2>Compartilhar</h2><p class="muted pequeno">Seu resumo pronto para mandar no grupo ou para o seu líder.</p>' +
+      '<pre class="relatorio-texto" id="rel-texto">' + esc(textoResumo) + "</pre>" +
+      '<button class="btn btn-primario btn-largo" id="rel-copiar">Copiar resumo</button></section></div>' +
+      '<section class="painel"><h2>🍅 Ranking de foco da equipe</h2><p class="muted pequeno">Quem fez mais pomodoros ' + periodo +
+      ", em todas as mentorias. Empate: mais horas de estudo.</p>" +
+      '<div id="rel-equipe"><p class="muted">Carregando…</p></div></section>' +
+      '<p class="muted pequeno">Como medimos: horas de estudo = minutos dos pomodoros concluídos + tempo nos flashcards fora de um pomodoro. ' +
+      "O tempo nos cards é estimado pelo intervalo entre um card e o próximo (uma pausa de mais de 5 minutos conta como sessão nova).</p>"
+    );
+
+    app.querySelectorAll("[data-periodo]").forEach(function (b) {
+      b.onclick = function () { location.hash = "#/relatorio" + (b.dataset.periodo === "30" ? "/30" : ""); };
+    });
+    document.getElementById("rel-copiar").onclick = function () {
+      const ok = function () { toast("Resumo copiado. É só colar no WhatsApp."); };
+      if (navigator.clipboard) navigator.clipboard.writeText(textoResumo).then(ok, function () { toast("Não consegui copiar. Selecione o texto e copie.", "erro"); });
+    };
+    try {
+      const pessoas = await carregarFoco(ini, fim);
+      const alvo = document.getElementById("rel-equipe");
+      if (alvo) alvo.innerHTML = tabelaFoco(pessoas);
+    } catch (err) {
+      const alvo = document.getElementById("rel-equipe");
+      if (alvo) alvo.innerHTML = '<p class="erro">' + esc(traduzErro(err)) + "</p>";
+    }
   }
 
   // ---------- perfil ----------
@@ -1929,6 +2111,7 @@
             '<button class="btn btn-secundario btn-perigo" data-pomo="cancelar">' + (pomoConfirmar ? "Confirmar: cancelar" : "Cancelar") + "</button></div>" +
             (pomoConfirmar ? '<p class="pomo-aviso">Cancelando, este pomodoro não conta para a ofensiva.</p>' : ""));
     }
+    corpo += '<a class="pomo-relatorio" href="#/relatorio" data-pomo="fechar">📊 Ver meu relatório de estudo</a>';
     return '<div class="pomo-cabeca"><h3>🍅 Pomodoro</h3><button class="pomo-fechar" data-pomo="fechar" aria-label="Fechar">×</button></div>' + corpo;
   }
 
@@ -2035,6 +2218,7 @@
         case "": return telaCursos();
         case "como-funciona": return telaComoFunciona();
         case "temporada": return telaTemporada();
+        case "relatorio": return telaRelatorio(partes[1]);
         case "perfil": return telaPerfil();
         default: location.hash = "#/";
       }
