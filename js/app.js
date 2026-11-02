@@ -143,7 +143,7 @@
       sb.from(T.praticas).select("*").eq("user_id", uid),
       sb.from(T.provas).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }),
       sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid),
-      sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em").eq("user_id", uid)
+      sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em,tipo,fora_segundos,saidas").eq("user_id", uid)
     ]);
     res.forEach(function (r) { if (r.error) throw r.error; });
     S.bruto = { cards: res[0].data, checks: res[1].data, provas: res[2].data, log: res[3].data, pomodoros: res[4].data };
@@ -566,6 +566,7 @@
     const aprovadas = aulas.filter(function (x) { return x.r && x.r.aprovado; }).length;
     const paraHoje = aulas.reduce(function (s, x) { return s + (x.r ? x.r.vencidos + x.r.novos : 0); }, 0);
     const primeiroNome = ((S.perfil && S.perfil.nome) || "").split(" ")[0];
+    const tranca = aulaLiberada() ? "" : '<span title="Abre com um pomodoro">🍅</span> ';
 
     const cards = aulas.map(function (x) {
       const a = x.info, r = x.r;
@@ -590,8 +591,8 @@
           return '<p class="aula-aviso">Provas liberam ' + (lib.liberaEm ? "a partir de " + dataBR(lib.liberaEm) : "depois de uma semana de flashcards") + "</p>";
         })() +
         '<div class="aula-acoes">' +
-        (revisar ? '<a class="btn btn-primario" href="' + rota("aula/" + a.numero) + '/revisao">Revisar agora (' + revisar + ")</a>" : '<span class="ok-hoje">Revisão em dia</span>') +
-        '<a class="btn btn-secundario" href="' + rota("aula/" + a.numero) + '/pratica">Abrir aula</a>' +
+        (revisar ? '<a class="btn btn-primario" href="' + rota("aula/" + a.numero) + '/revisao">' + tranca + "Revisar agora (" + revisar + ")</a>" : '<span class="ok-hoje">Revisão em dia</span>') +
+        '<a class="btn btn-secundario" href="' + rota("aula/" + a.numero) + '/pratica">' + tranca + "Abrir aula</a>" +
         "</div></article>";
     }).join("");
 
@@ -1360,6 +1361,12 @@
       "<p>Em <b>Relatório</b> (no menu) você vê quantas horas estudou, quantos pomodoros fez e quantos flashcards revisou nos últimos <b>7 ou 30 dias</b>, dia a dia, comparado ao período anterior. Tem um botão para copiar o resumo e mandar no WhatsApp.</p>" +
       "<p><b>Horas de estudo</b> = os minutos dos pomodoros concluídos + o tempo nos flashcards fora de um pomodoro (sem contar duas vezes). O tempo nos cards é estimado pelo intervalo entre um card e o próximo.</p>" +
       "<p>O <b>Ranking de foco</b> mostra quem fez mais pomodoros. No Ranking de cada mentoria ele aparece com a semana atual e zera toda segunda-feira.</p></section>" +
+      '<section class="guia-bloco"><h2>🔒 Aulas só com pomodoro e tempo disperso</h2>' +
+      "<p>As aulas (resumo, áudio, flashcards, parte prática e provas) só abrem com um pomodoro rodando. Ao clicar em <b>Revisar agora</b> ou <b>Abrir aula</b> sem pomodoro, você escolhe o tipo e entra na hora:</p>" +
+      "<ul><li><b>🎧 Estudo:</b> para estudar dentro da plataforma. Se você sair para outra aba ou programa, o tempo fora é medido. " +
+      "Depois de " + REGRAS.alertaForaSegundos + " segundos fora chega um aviso (permita as notificações do navegador), e com " + REGRAS.limiteForaMinutos + " minutos fora, somados, o pomodoro fica marcado como <b>disperso</b>. Ele continua contando para a ofensiva.</li>" +
+      "<li><b>🛠️ Execução prática:</b> para executar a parte prática em outras ferramentas (Claude, Gerenciador de Anúncios etc.). O tempo fora não é medido.</li></ul>" +
+      "<p>No Relatório aparecem o seu <b>índice de foco</b> (quanto do pomodoro de estudo você ficou na plataforma), o tempo fora, as saídas e o ranking de quem menos se dispersou.</p></section>" +
 
       '<section class="guia-bloco"><h2>🏆 Ranking</h2>' +
       "<p>Cada mentoria tem o seu ranking, só com as pessoas daquela mentoria. A posição é definida pela <b>média das provas</b> (a melhor nota de cada prova). Em caso de empate, ganha quem fez mais provas e depois quem tem a maior ofensiva. Também tem um ranking separado só das maiores ofensivas.</p>" +
@@ -1824,18 +1831,28 @@
       segCards += s;
       if (!noFoco) { segExtra += s; d.extra += s; }
     });
+    // Dispersão: só nos pomodoros de estudo (no de execução a pessoa trabalha fora da plataforma)
+    const estudo = poms.filter(function (p) { return (p.tipo || "estudo") === "estudo"; });
+    const foraSeg = estudo.reduce(function (s, p) { return s + (p.fora_segundos || 0); }, 0);
+    const minEstudo = estudo.reduce(function (s, p) { return s + p.minutos; }, 0);
     return {
       pomodoros: poms.length, minFoco: minFoco, cards: revs.length, segCards: segCards, segExtra: segExtra,
-      segTotal: minFoco * 60 + segExtra, dias: Object.keys(porDia).length, porDia: porDia
+      segTotal: minFoco * 60 + segExtra, dias: Object.keys(porDia).length, porDia: porDia,
+      pomEstudo: estudo.length, pomExecucao: poms.length - estudo.length, foraSeg: foraSeg,
+      saidas: estudo.reduce(function (s, p) { return s + (p.saidas || 0); }, 0),
+      dispersos: estudo.filter(function (p) { return (p.fora_segundos || 0) >= REGRAS.limiteForaMinutos * 60; }).length,
+      indiceFoco: minEstudo ? Math.max(0, Math.round((1 - foraSeg / (minEstudo * 60)) * 100)) : null
     };
   }
 
   async function carregarFoco(ini, fim) {
-    const r = await sb.rpc("academy_foco", { p_inicio: ini.toISOString(), p_fim: fim.toISOString() });
+    const r = await sb.rpc("academy_foco", { p_inicio: ini.toISOString(), p_fim: fim.toISOString(), p_limite_fora: REGRAS.limiteForaMinutos * 60 });
     if (r.error) throw r.error;
     return (r.data || []).map(function (p) {
       return { id: p.user_id, nome: p.nome || "(sem nome)", pomodoros: p.pomodoros, minFoco: p.minutos_foco, cards: p.cards,
-        segCards: p.segundos_cards, segTotal: p.minutos_foco * 60 + p.segundos_extra, dias: p.dias };
+        segCards: p.segundos_cards, segTotal: p.minutos_foco * 60 + p.segundos_extra, dias: p.dias,
+        pomEstudo: p.pomodoros_estudo, foraSeg: p.fora_segundos, saidas: p.saidas, dispersos: p.dispersos,
+        indiceFoco: p.minutos_estudo ? Math.max(0, Math.round((1 - p.fora_segundos / (p.minutos_estudo * 60)) * 100)) : null };
     }).sort(function (a, b) { return b.pomodoros - a.pomodoros || b.segTotal - a.segTotal || b.cards - a.cards; });
   }
 
@@ -1847,13 +1864,30 @@
     const lista = limite ? ativos.slice(0, limite) : ativos;
     const medalhas = ["🥇", "🥈", "🥉"];
     if (!lista.length) return '<p class="muted">Ninguém estudou neste período ainda. Comece um 🍅 e saia na frente.</p>';
-    return '<div class="tabela-rolagem sem-sombra"><table class="tabela tabela-foco"><thead><tr><th>#</th><th>Pessoa</th><th>Pomodoros</th><th>Horas de estudo</th><th>Cards</th><th>Dias</th></tr></thead><tbody>' +
+    return '<div class="tabela-rolagem sem-sombra"><table class="tabela tabela-foco"><thead><tr><th>#</th><th>Pessoa</th><th>Pomodoros</th><th>Horas de estudo</th><th>Tempo fora</th><th>Cards</th><th>Dias</th></tr></thead><tbody>' +
       lista.map(function (p, i) {
         return '<tr class="' + (p.id === eu ? "voce" : "") + '"><td><b>' + (medalhas[i] || (i + 1) + "º") + "</b></td><td>" + esc(p.nome) +
           (p.id === eu ? ' <span class="chip chip-ok">você</span>' : "") + "</td><td><b>🍅 " + p.pomodoros + "</b></td><td>" + tempoTxt(p.segTotal) +
-          "</td><td>" + p.cards + "</td><td>" + p.dias + "</td></tr>";
+          "</td><td>" + (p.pomEstudo ? tempoFora(p.foraSeg) : "—") + "</td><td>" + p.cards + "</td><td>" + p.dias + "</td></tr>";
       }).join("") + "</tbody></table></div>" +
       (!limite && parados.length ? '<p class="muted pequeno">Ainda sem estudo no período: ' + parados.map(function (p) { return esc(p.nome); }).join(", ") + ".</p>" : "");
+  }
+
+  function tempoFora(seg) { return !seg ? "0 min" : seg < 60 ? "menos de 1 min" : tempoTxt(seg); }
+
+  // Ranking de dispersão: índice de foco = parte do tempo dos pomodoros de estudo em que a pessoa ficou na plataforma
+  function tabelaDispersao(pessoas) {
+    const eu = S.session.user.id;
+    const lista = pessoas.filter(function (p) { return p.pomEstudo; }).sort(function (a, b) {
+      return b.indiceFoco - a.indiceFoco || a.foraSeg - b.foraSeg || b.pomEstudo - a.pomEstudo;
+    });
+    if (!lista.length) return '<p class="muted">Ninguém fez pomodoro de estudo neste período ainda.</p>';
+    return '<div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr><th>#</th><th>Pessoa</th><th>Índice de foco</th><th>Tempo fora</th><th>Saídas</th><th>Pomodoros dispersos</th></tr></thead><tbody>' +
+      lista.map(function (p, i) {
+        return '<tr class="' + (p.id === eu ? "voce" : "") + '"><td><b>' + (i + 1) + "º</b></td><td>" + esc(p.nome) +
+          (p.id === eu ? ' <span class="chip chip-ok">você</span>' : "") + "</td><td><b>🎯 " + p.indiceFoco + "%</b></td><td>" + tempoFora(p.foraSeg) +
+          "</td><td>" + p.saidas + "</td><td>" + p.dispersos + " de " + p.pomEstudo + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
   }
 
   // Resumo curto dos últimos 7 dias na tela inicial
@@ -1903,6 +1937,7 @@
       "🍅 " + e.pomodoros + " pomodoro" + (e.pomodoros === 1 ? "" : "s") + " (" + tempoTxt(e.minFoco * 60) + " de foco)\n" +
       "🧠 " + e.cards + " flashcards revisados\n" +
       "📅 " + e.dias + " de " + dias + " dias estudando\n" +
+      (e.indiceFoco !== null ? "🎯 Índice de foco: " + e.indiceFoco + "% (" + tempoFora(e.foraSeg) + " fora da plataforma)\n" : "") +
       "🔥 Ofensiva atual: " + calcularOfensiva().dias + " dia(s)";
 
     const frase = !e.segTotal
@@ -1929,13 +1964,22 @@
       "<li><span>Tempo de foco (pomodoros)</span><b>" + tempoTxt(e.minFoco * 60) + "</b></li>" +
       "<li><span>Tempo nos flashcards</span><b>" + tempoTxt(e.segCards) + "</b></li>" +
       "<li><span>Média por dia estudado</span><b>" + (e.dias ? tempoTxt(e.segTotal / e.dias) : "—") + "</b></li>" +
-      "<li><span>Comparado aos " + dias + " dias anteriores</span><b>" + tempoTxt(a.segTotal) + " antes</b></li></ul></section>" +
+      "<li><span>Comparado aos " + dias + " dias anteriores</span><b>" + tempoTxt(a.segTotal) + " antes</b></li></ul>" +
+      '<h3 class="relatorio-sub">🎯 Foco nos pomodoros de estudo</h3><ul class="relatorio-detalhe">' +
+      "<li><span>Índice de foco (tempo dentro da plataforma)</span><b>" + (e.indiceFoco === null ? "—" : e.indiceFoco + "%") + "</b></li>" +
+      "<li><span>Tempo fora da plataforma</span><b>" + tempoFora(e.foraSeg) + (a.pomEstudo ? " <small class=\"muted\">(antes: " + tempoFora(a.foraSeg) + ")</small>" : "") + "</b></li>" +
+      "<li><span>Saídas para outras abas ou programas</span><b>" + e.saidas + "</b></li>" +
+      "<li><span>Pomodoros dispersos (" + REGRAS.limiteForaMinutos + " min ou mais fora)</span><b>" + e.dispersos + " de " + e.pomEstudo + "</b></li>" +
+      "<li><span>Pomodoros de execução prática</span><b>" + e.pomExecucao + "</b></li></ul></section>" +
       '<section class="painel"><h2>Compartilhar</h2><p class="muted pequeno">Seu resumo pronto para mandar no grupo ou para o seu líder.</p>' +
       '<pre class="relatorio-texto" id="rel-texto">' + esc(textoResumo) + "</pre>" +
       '<button class="btn btn-primario btn-largo" id="rel-copiar">Copiar resumo</button></section></div>' +
       '<section class="painel"><h2>🍅 Ranking de foco da equipe</h2><p class="muted pequeno">Quem fez mais pomodoros ' + periodo +
       ", em todas as mentorias. Empate: mais horas de estudo.</p>" +
       '<div id="rel-equipe"><p class="muted">Carregando…</p></div></section>' +
+      '<section class="painel"><h2>🎯 Ranking de foco: quem menos se dispersou</h2><p class="muted pequeno">Só pomodoros de estudo ' + periodo +
+      ". Índice de foco = parte do tempo do pomodoro em que a pessoa ficou dentro da plataforma. Empate: menos tempo fora.</p>" +
+      '<div id="rel-dispersao"><p class="muted">Carregando…</p></div></section>' +
       '<p class="muted pequeno">Como medimos: horas de estudo = minutos dos pomodoros concluídos + tempo nos flashcards fora de um pomodoro. ' +
       "O tempo nos cards é estimado pelo intervalo entre um card e o próximo (uma pausa de mais de 5 minutos conta como sessão nova).</p>"
     );
@@ -1949,11 +1993,14 @@
     };
     try {
       const pessoas = await carregarFoco(ini, fim);
-      const alvo = document.getElementById("rel-equipe");
+      const alvo = document.getElementById("rel-equipe"), alvo2 = document.getElementById("rel-dispersao");
       if (alvo) alvo.innerHTML = tabelaFoco(pessoas);
+      if (alvo2) alvo2.innerHTML = tabelaDispersao(pessoas);
     } catch (err) {
-      const alvo = document.getElementById("rel-equipe");
-      if (alvo) alvo.innerHTML = '<p class="erro">' + esc(traduzErro(err)) + "</p>";
+      ["rel-equipe", "rel-dispersao"].forEach(function (id) {
+        const alvo = document.getElementById(id);
+        if (alvo) alvo.innerHTML = '<p class="erro">' + esc(traduzErro(err)) + "</p>";
+      });
     }
   }
 
@@ -2018,19 +2065,94 @@
     } catch (e) { /* sem áudio */ }
   }
 
-  function pomoComecar(fase) {
+  // tipo "estudo": dentro da plataforma, o tempo fora da aba conta como disperso;
+  // tipo "execucao": parte prática em outras ferramentas, o tempo fora não é medido.
+  function pomoComecar(fase, tipo) {
     const min = fase === "pausa" ? REGRAS.pausaMinutos : REGRAS.pomodoroMinutos;
     try { pomoSom = pomoSom || new (window.AudioContext || window.webkitAudioContext)(); if (pomoSom.resume) pomoSom.resume(); } catch (e) { /* sem áudio */ }
-    gravarJSON(POMO_CHAVE, { uid: S.session.user.id, fase: fase, minutos: min, inicio: Date.now(), fimEm: Date.now() + min * 60000, pausadoRestante: null });
+    // Pede permissão de notificação no clique, para avisar quando a pessoa sair da plataforma
+    if (fase === "foco" && tipo !== "execucao" && window.Notification && Notification.permission === "default") {
+      try { Notification.requestPermission(); } catch (e) { /* navegador sem suporte */ }
+    }
+    gravarJSON(POMO_CHAVE, { uid: S.session.user.id, fase: fase, tipo: fase === "foco" ? (tipo || "estudo") : null, minutos: min,
+      inicio: Date.now(), fimEm: Date.now() + min * 60000, pausadoRestante: null, foraMs: 0, saidas: 0, saiuEm: null });
     pomoConfirmar = false;
     pomoAtualizar();
   }
 
   async function pomoSalvar(item) {
-    const r = await sb.from(T.pomodoros).insert({ minutos: item.minutos, iniciado_em: item.iniciado_em });
+    const r = await sb.from(T.pomodoros).insert({ minutos: item.minutos, iniciado_em: item.iniciado_em,
+      tipo: item.tipo || "estudo", fora_segundos: item.fora_segundos || 0, saidas: item.saidas || 0 });
     if (r.error) throw r.error;
-    S.bruto.pomodoros.push({ minutos: item.minutos, iniciado_em: item.iniciado_em, concluido_em: new Date().toISOString() });
+    S.bruto.pomodoros.push({ minutos: item.minutos, iniciado_em: item.iniciado_em, concluido_em: new Date().toISOString(),
+      tipo: item.tipo || "estudo", fora_segundos: item.fora_segundos || 0, saidas: item.saidas || 0 });
   }
+
+  // ---------- dispersão: tempo fora da plataforma durante o pomodoro de estudo ----------
+  // Conta como fora quando a aba fica escondida ou a janela perde o foco (outra aba, outro programa).
+  // Saídas de menos de 10 segundos (ex.: clicar na barra de endereço) não contam.
+  const SAIDA_MINIMA = 10000;
+  let pomoAlertas = [];
+
+  function pomoVigiado(e) { return e && e.fase === "foco" && e.tipo !== "execucao" && e.pausadoRestante == null; }
+  function pomoForaAgora() { return document.hidden || !document.hasFocus(); }
+
+  // Fecha uma saída em aberto e soma o tempo (no máximo até o fim do pomodoro)
+  function pomoFecharSaida(e, agora) {
+    if (!e || !e.saiuEm) return;
+    const ms = Math.max(0, Math.min(agora, e.fimEm) - e.saiuEm);
+    if (ms >= SAIDA_MINIMA) { e.foraMs = (e.foraMs || 0) + ms; e.saidas = (e.saidas || 0) + 1; }
+    e.saiuEm = null;
+    return ms;
+  }
+
+  function pomoNotificar(titulo, texto) {
+    pomoBipe();
+    try {
+      if (window.Notification && Notification.permission === "granted") {
+        const n = new Notification(titulo, { body: texto, tag: "academy-pomodoro" });
+        n.onclick = function () { window.focus(); n.close(); };
+      }
+    } catch (e) { /* sem notificação */ }
+  }
+
+  function pomoVigiar() {
+    const e = pomoEstado();
+    if (!pomoVigiado(e)) return;
+    const fora = pomoForaAgora();
+    if (fora && !e.saiuEm) {
+      e.saiuEm = Date.now();
+      gravarJSON(POMO_CHAVE, e);
+      const limite = REGRAS.limiteForaMinutos * 60000;
+      const jaFora = e.foraMs || 0;
+      pomoAlertas.forEach(clearTimeout);
+      pomoAlertas = [
+        setTimeout(function () {
+          const x = pomoEstado();
+          if (pomoVigiado(x) && x.saiuEm) pomoNotificar("🍅 Seu pomodoro está rolando", "Você saiu da Keep Ads Academy há " + Math.round((Date.now() - x.saiuEm) / 1000) + " segundos. Volte para o foco!");
+        }, REGRAS.alertaForaSegundos * 1000)
+      ];
+      if (jaFora < limite) {
+        pomoAlertas.push(setTimeout(function () {
+          const x = pomoEstado();
+          if (pomoVigiado(x) && x.saiuEm) pomoNotificar("⚠️ " + REGRAS.limiteForaMinutos + " minutos fora da plataforma", "Este pomodoro vai ficar marcado como disperso no seu relatório.");
+        }, limite - jaFora));
+      }
+    } else if (!fora && e.saiuEm) {
+      pomoAlertas.forEach(clearTimeout);
+      pomoAlertas = [];
+      const ms = pomoFecharSaida(e, Date.now());
+      gravarJSON(POMO_CHAVE, e);
+      if (ms >= SAIDA_MINIMA) {
+        const total = e.foraMs;
+        toast("👀 Você ficou " + tempoTxt(ms / 1000).replace("0 min", "menos de 1 min") + " fora da plataforma. Neste pomodoro: " + tempoTxt(total / 1000) +
+          (total >= REGRAS.limiteForaMinutos * 60000 ? " (pomodoro disperso)." : "."), total >= REGRAS.limiteForaMinutos * 60000 ? "erro" : "ok");
+      }
+    }
+  }
+  document.addEventListener("visibilitychange", pomoVigiar);
+  window.addEventListener("blur", function () { setTimeout(pomoVigiar, 50); });
+  window.addEventListener("focus", pomoVigiar);
 
   // Grava os pomodoros que terminaram sem internet (ou com a aba fechada) assim que der
   async function pomoEnviarPendentes() {
@@ -2051,15 +2173,21 @@
   }
 
   async function pomoConcluir(e) {
-    gravarJSON(POMO_CHAVE, { uid: e.uid, fase: "feito" });
+    pomoFecharSaida(e, e.fimEm);
+    pomoAlertas.forEach(clearTimeout);
+    pomoAlertas = [];
+    const foraSeg = e.tipo === "execucao" ? 0 : Math.round((e.foraMs || 0) / 1000);
+    gravarJSON(POMO_CHAVE, { uid: e.uid, fase: "feito", tipo: e.tipo, foraSeg: foraSeg, saidas: e.saidas || 0 });
     pomoAberto = true;
-    pomoBipe();
-    const item = { uid: e.uid, minutos: e.minutos, iniciado_em: new Date(e.inicio).toISOString() };
+    pomoNotificar("🍅 Pomodoro concluído!", "Hora da pausa de " + REGRAS.pausaMinutos + " minutos.");
+    const item = { uid: e.uid, minutos: e.minutos, iniciado_em: new Date(e.inicio).toISOString(),
+      tipo: e.tipo || "estudo", fora_segundos: foraSeg, saidas: e.tipo === "execucao" ? 0 : (e.saidas || 0) };
     try {
       await pomoSalvar(item);
       const o = calcularOfensiva();
-      toast(o.batidaHoje ? "Pomodoro concluído! Ofensiva do dia garantida 🔥" :
-        "Pomodoro concluído! Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva.", "ok");
+      const disperso = foraSeg >= REGRAS.limiteForaMinutos * 60;
+      toast((disperso ? "Pomodoro concluído, mas disperso: " + tempoTxt(foraSeg) + " fora da plataforma. " : "Pomodoro concluído! ") +
+        (o.batidaHoje ? "Ofensiva do dia garantida 🔥" : "Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva."), disperso ? "erro" : "ok");
       if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) confete();
     } catch (err) {
       const fila = lerJSON(POMO_PENDENTES) || [];
@@ -2084,6 +2212,12 @@
     if (bloco) bloco.outerHTML = blocoOfensiva();
   }
 
+  function botoesPomodoro(secundario) {
+    return '<div class="pomo-tipos">' +
+      '<button class="btn ' + (secundario ? "btn-secundario" : "btn-primario") + '" data-pomo="foco"><span>🎧 Estudo</span><small>resumo, áudio, cards e provas · fique na plataforma</small></button>' +
+      '<button class="btn btn-secundario" data-pomo="foco-exec"><span>🛠️ Execução prática</span><small>fazer a parte prática em outras ferramentas</small></button></div>';
+  }
+
   function pomoPainelHTML(e) {
     const hoje = pomodorosHoje();
     const contagem = '<p class="pomo-hoje">Hoje: <b>' + hoje + "</b> pomodoro" + (hoje === 1 ? "" : "s") + " concluído" + (hoje === 1 ? "" : "s") +
@@ -2091,12 +2225,16 @@
     let corpo;
     if (!e) {
       corpo = '<p class="pomo-texto">' + REGRAS.pomodoroMinutos + " minutos de foco em uma coisa só: celular longe, uma aba aberta, sem responder mensagem. " +
-        "No fim, " + REGRAS.pausaMinutos + " minutos de pausa.</p>" + contagem +
-        '<button class="btn btn-primario btn-largo" data-pomo="foco">Começar ' + REGRAS.pomodoroMinutos + " min de foco</button>";
+        "No fim, " + REGRAS.pausaMinutos + " minutos de pausa.</p>" + contagem + botoesPomodoro();
     } else if (e.fase === "feito") {
-      corpo = '<div class="pomo-feito">🍅</div><p class="pomo-texto"><b>Pomodoro concluído!</b> Levante, beba água e descanse a cabeça antes do próximo.</p>' + contagem +
-        '<div class="pomo-acoes"><button class="btn btn-primario" data-pomo="pausa">Pausa de ' + REGRAS.pausaMinutos + " min</button>" +
-        '<button class="btn btn-secundario" data-pomo="foco">Novo pomodoro</button></div>';
+      const disperso = e.foraSeg >= REGRAS.limiteForaMinutos * 60;
+      corpo = '<div class="pomo-feito">🍅</div><p class="pomo-texto"><b>Pomodoro concluído!</b> Levante, beba água e descanse a cabeça antes do próximo.</p>' +
+        (e.tipo !== "execucao" && e.foraSeg != null
+          ? '<p class="pomo-fora' + (disperso ? " disperso" : "") + '">' + (e.foraSeg < 10 ? "🎯 Sem sair da plataforma. Foco total!" :
+            "👀 " + tempoTxt(e.foraSeg).replace(/^0 min$/, "menos de 1 min") + " fora da plataforma em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") + (disperso ? " · pomodoro disperso" : "")) + "</p>"
+          : "") + contagem +
+        '<div class="pomo-acoes"><button class="btn btn-primario" data-pomo="pausa">Pausa de ' + REGRAS.pausaMinutos + " min</button></div>" +
+        '<p class="pomo-hoje pomo-ou">ou comece o próximo:</p>' + botoesPomodoro(true);
     } else {
       const rest = pomoRestante(e), total = e.minutos * 60000;
       const pct = Math.round((1 - rest / total) * 100);
@@ -2106,7 +2244,12 @@
         (e.fase === "pausa"
           ? '<p class="pomo-texto">Descanse longe da tela. O próximo pomodoro começa quando você quiser.</p>' +
             '<div class="pomo-acoes"><button class="btn btn-secundario" data-pomo="pular">Pular pausa</button></div>'
-          : '<p class="pomo-texto">Pode navegar pela plataforma à vontade: o tempo continua contando.</p>' + contagem +
+          : (e.tipo === "execucao"
+              ? '<p class="pomo-texto">🛠️ <b>Execução prática.</b> Pode usar outras ferramentas à vontade; o tempo fora não conta como dispersão.</p>'
+              : '<p class="pomo-texto">🎧 <b>Estudo.</b> Fique na plataforma: sair para outra aba ou programa conta como tempo disperso.</p>' +
+                '<p class="pomo-fora' + ((e.foraMs || 0) >= REGRAS.limiteForaMinutos * 60000 ? " disperso" : "") + '">Fora da plataforma: <b>' +
+                ((e.foraMs || 0) < 60000 ? ((e.foraMs || 0) ? "menos de 1 min" : "0 min") : tempoTxt(e.foraMs / 1000)) + "</b>" +
+                (e.saidas ? " em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") : "") + "</p>") + contagem +
             '<div class="pomo-acoes"><button class="btn btn-secundario" data-pomo="' + (pausado ? "retomar" : "pausar") + '">' + (pausado ? "▶ Retomar" : "⏸ Pausar") + "</button>" +
             '<button class="btn btn-secundario btn-perigo" data-pomo="cancelar">' + (pomoConfirmar ? "Confirmar: cancelar" : "Cancelar") + "</button></div>" +
             (pomoConfirmar ? '<p class="pomo-aviso">Cancelando, este pomodoro não conta para a ofensiva.</p>' : ""));
@@ -2171,9 +2314,13 @@
     if (!b) return;
     const acao = b.dataset.pomo, e = pomoEstado();
     if (acao === "fechar") { pomoAberto = false; pomoConfirmar = false; }
-    else if (acao === "foco" || acao === "pausa") pomoComecar(acao);
+    else if (acao === "foco" || acao === "foco-exec" || acao === "pausa") {
+      pomoComecar(acao === "pausa" ? "pausa" : "foco", acao === "foco-exec" ? "execucao" : "estudo");
+      // Começou pela tela de bloqueio da aula: entra na aula na hora
+      if (acao !== "pausa" && document.querySelector(".portao")) { pomoAberto = false; rotear(); }
+    }
     else if (acao === "pular") gravarJSON(POMO_CHAVE, null);
-    else if (acao === "pausar" && e) { e.pausadoRestante = pomoRestante(e); gravarJSON(POMO_CHAVE, e); }
+    else if (acao === "pausar" && e) { pomoFecharSaida(e, Date.now()); e.pausadoRestante = pomoRestante(e); gravarJSON(POMO_CHAVE, e); }
     else if (acao === "retomar" && e) { e.fimEm = Date.now() + e.pausadoRestante; e.pausadoRestante = null; gravarJSON(POMO_CHAVE, e); }
     else if (acao === "cancelar") {
       if (!pomoConfirmar) pomoConfirmar = true;
@@ -2183,7 +2330,32 @@
   });
   // Outra aba mexeu no pomodoro: acompanha na hora
   window.addEventListener("storage", function (ev) { if (ev.key === POMO_CHAVE) pomoAtualizar(); });
-  setInterval(pomoAtualizar, 1000);
+  setInterval(function () { pomoVigiar(); pomoAtualizar(); }, 1000);
+
+  // Portão das aulas: sem pomodoro de foco rodando, a aula não abre
+  function aulaLiberada() {
+    if (!REGRAS.aulaSoComPomodoro) return true;
+    if (REGRAS.adminsSemPortao && S.perfil && S.perfil.is_admin) return true;
+    const e = pomoEstado();
+    return !!(e && e.fase === "foco");
+  }
+
+  function telaPortao(n) {
+    const aula = CURSO.aulas.find(function (a) { return a.numero === n; });
+    const e = pomoEstado();
+    layout(
+      '<a href="' + rota("") + '" class="voltar">← Voltar para as aulas</a>' +
+      '<section class="painel portao"><div class="portao-icone">🍅</div>' +
+      '<p class="hero-kicker">aula ' + dois(n) + (aula ? " · " + esc(aula.titulo) : "") + "</p>" +
+      "<h1>Comece um pomodoro para entrar na aula</h1>" +
+      '<p class="muted">As aulas só abrem com o foco ligado: são ' + REGRAS.pomodoroMinutos + " minutos dedicados a uma coisa só. Escolha o tipo do pomodoro:</p>" +
+      (e && e.fase === "pausa" ? '<p class="aviso">Você está na pausa. Se já descansou, pode começar o próximo agora.</p>' : "") +
+      botoesPomodoro() +
+      '<ul class="portao-dicas"><li><b>🎧 Estudo:</b> resumo, áudio, flashcards e provas. Ficar fora da plataforma conta como tempo disperso no seu relatório' +
+      " (avisamos depois de " + REGRAS.alertaForaSegundos + " segundos fora; com " + REGRAS.limiteForaMinutos + " minutos fora o pomodoro fica marcado como disperso).</li>" +
+      "<li><b>🛠️ Execução prática:</b> para fazer a parte prática da aula em outras ferramentas. O tempo fora não é medido.</li></ul></section>"
+    );
+  }
 
   // ---------- roteador ----------
 
@@ -2206,7 +2378,7 @@
         if (!usarCurso(partes[1])) { location.hash = "#/"; return; }
         switch (partes[2] || "") {
           case "": return telaInicio();
-          case "aula": return telaAula(Number(partes[3]), partes[4] || "revisao");
+          case "aula": return aulaLiberada() ? telaAula(Number(partes[3]), partes[4] || "revisao") : telaPortao(Number(partes[3]));
           case "certificado": return telaCertificado(partes[3] === "modelo");
           case "equipe": return telaEquipe();
           case "ranking": return telaRanking();
