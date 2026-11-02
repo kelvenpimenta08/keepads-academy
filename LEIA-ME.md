@@ -90,7 +90,7 @@ Os cursos ficam em `content/curso.js`, na lista `window.CURSOS`. Hoje são dois:
    - Dica: peça ao Claude: *"Leia a transcrição da Aula 02 do Adriano e gere o arquivo da aula no mesmo formato da aula-01.js."*
 2. Em `index.html`, acrescente a linha `<script src="content/NOME-DO-ARQUIVO.js?v=..."></script>`.
 3. Em `content/curso.js`, no curso certo, troque o título da aula e mude `disponivel` para `true` (ou acrescente a aula na lista `aulas`).
-4. Opcional, mas recomendado: crie `content/resumos/aula-NN.js` com o resumo por hora (`fases`) e o mapa mental (`mapa`) da aula, no mesmo formato dos que já existem, e acrescente a linha dele no `index.html` depois do arquivo da aula. As abas Resumo e Mapa mental só aparecem quando esse arquivo existe.
+4. Opcional, mas recomendado: crie `content/resumos/aula-NN.js` com o resumo por hora (`fases`) e o mapa mental (`mapa`) da aula, no mesmo formato dos que já existem, e acrescente a linha dele no `index.html` depois do arquivo da aula. As abas Resumo e Mapa mental só aparecem quando esse arquivo existe. Para o áudio com voz humanizada (voz Antonio, neural), rode na pasta Keep Academy `python ferramentas/gerar_audios.py`: ele cria `audio/resumos/aula-NN-hora-H.mp3`, que também precisa subir para o GitHub. Sem o MP3, o site lê com a voz do navegador.
 5. Suba os arquivos alterados no GitHub (**Add file → Upload files**, por cima dos antigos) e aumente o `?v=` do `index.html`.
 
 Depois que a equipe começar a estudar, evite mudar o texto de um card a ponto de mudar o sentido dele. Correções pequenas não têm problema.
