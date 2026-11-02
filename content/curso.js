@@ -76,8 +76,8 @@
       id: "t1-adriano",
       nome: "Temporada 1",
       curso: "adriano-ia-trafego",
-      inicio: "2026-11-02",
-      fim: "2027-01-30",
+      inicio: "2026-11-04",   // começa na quarta, depois da apresentação da plataforma para a equipe
+      fim: "2027-02-01",      // 90 dias contando o primeiro
       adminsConcorrem: false,
       premios: [
         { id: "campeao", titulo: "Campeão da temporada", icone: "🥇", valor: 550, regra: "1º lugar no placar dos 90 dias",
@@ -96,8 +96,8 @@
       id: "t2-di-santana",
       nome: "Temporada 2",
       curso: "di-santana-growth-commerce",
-      inicio: "2027-02-01",
-      fim: "2027-05-01",
+      inicio: "2027-02-03",
+      fim: "2027-05-03",
       adminsConcorrem: false,
       premios: []           // a definir antes de a temporada começar
     }
