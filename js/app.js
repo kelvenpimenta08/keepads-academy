@@ -23,7 +23,8 @@
     cards: "academy_card_states",
     log: "academy_review_log",
     praticas: "academy_practice_checks",
-    provas: "academy_quiz_attempts"
+    provas: "academy_quiz_attempts",
+    pomodoros: "academy_pomodoros"
   };
 
   // Estado da sessão no navegador
@@ -141,10 +142,11 @@
       sb.from(T.cards).select("*").eq("user_id", uid),
       sb.from(T.praticas).select("*").eq("user_id", uid),
       sb.from(T.provas).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }),
-      sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid)
+      sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid),
+      sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em").eq("user_id", uid)
     ]);
     res.forEach(function (r) { if (r.error) throw r.error; });
-    S.bruto = { cards: res[0].data, checks: res[1].data, provas: res[2].data, log: res[3].data };
+    S.bruto = { cards: res[0].data, checks: res[1].data, provas: res[2].data, log: res[3].data, pomodoros: res[4].data };
     S.porCurso = {};
     S.dados = CURSO ? dadosDoCurso(CURSO) : null;
   }
@@ -200,18 +202,26 @@
   function rota(caminho) { return "#/c/" + (CURSO || cursoDoMenu()).id + (caminho ? "/" + caminho : ""); }
 
   // ---------- ofensiva (estilo Duolingo) ----------
-  // Um dia conta quando a pessoa revisa pelo menos REGRAS.metaDiaria flashcards, de qualquer aula ou curso.
+  // Um dia conta quando a pessoa faz pelo menos 1 pomodoro E revisa pelo menos REGRAS.metaDiaria
+  // flashcards, de qualquer aula ou curso. O ranking e a temporada usam a mesma regra no banco.
   function calcularOfensiva() {
-    const porDia = {};
+    const porDia = {}, focoPorDia = {};
     ((S.bruto && S.bruto.log) || []).forEach(function (l) {
       const d = diaLocal(l.reviewed_at);
       porDia[d] = (porDia[d] || 0) + 1;
     });
+    ((S.bruto && S.bruto.pomodoros) || []).forEach(function (p) {
+      const d = diaLocal(p.concluido_em);
+      focoPorDia[d] = (focoPorDia[d] || 0) + 1;
+    });
     const meta = REGRAS.metaDiaria;
-    const bateu = function (data) { return (porDia[diaLocal(data)] || 0) >= meta; };
-    const hoje = porDia[diaLocal(new Date())] || 0;
+    const bateu = function (data) { const d = diaLocal(data); return (porDia[d] || 0) >= meta && (focoPorDia[d] || 0) >= 1; };
+    const chaveHoje = diaLocal(new Date());
+    const hoje = porDia[chaveHoje] || 0;
+    const pomodorosHoje = focoPorDia[chaveHoje] || 0;
+    const batidaHoje = hoje >= meta && pomodorosHoje >= 1;
     // A sequência vale até ontem: se hoje ainda não bateu a meta, ela não está perdida
-    let cursor = new Date(hoje >= meta ? Date.now() : Date.now() - DIA);
+    let cursor = new Date(batidaHoje ? Date.now() : Date.now() - DIA);
     let dias = 0;
     while (bateu(cursor)) { dias++; cursor = new Date(cursor.getTime() - DIA); }
     const semana = [];
@@ -219,7 +229,7 @@
       const d = new Date(Date.now() - i * DIA);
       semana.push({ data: d, feito: bateu(d), hoje: i === 0 });
     }
-    return { dias: dias, hoje: hoje, meta: meta, batidaHoje: hoje >= meta, semana: semana };
+    return { dias: dias, hoje: hoje, meta: meta, pomodorosHoje: pomodorosHoje, batidaHoje: batidaHoje, semana: semana };
   }
 
   function blocoOfensiva() {
@@ -231,10 +241,14 @@
     return '<section class="ofensiva">' +
       '<div class="ofensiva-numero"><span class="ofensiva-fogo' + (o.dias > 0 ? " acesa" : "") + '">🔥</span><div><b>' + o.dias + "</b><span>" + (o.dias === 1 ? "dia" : "dias") + " de ofensiva</span></div></div>" +
       '<div class="ofensiva-semana">' + bolinhas + "</div>" +
-      '<p class="ofensiva-meta">' + (o.batidaHoje
-        ? "Meta de hoje batida: <b>" + o.hoje + " flashcards</b> revisados. Volte amanhã para manter a ofensiva."
-        : "Hoje: <b>" + o.hoje + " de " + o.meta + "</b> flashcards. Revise " + (o.meta - o.hoje) + " para " + (o.dias ? "manter" : "começar") + " a sua ofensiva.") +
-      "</p></section>";
+      '<div class="ofensiva-meta">' + (o.batidaHoje
+        ? "<p>Meta de hoje batida: <b>" + o.pomodorosHoje + " pomodoro" + (o.pomodorosHoje > 1 ? "s" : "") + "</b> e <b>" + o.hoje + " flashcards</b>. Volte amanhã para manter a ofensiva.</p>"
+        : "<p>Para " + (o.dias ? "manter" : "começar") + " a ofensiva hoje, faça as duas coisas:</p>" +
+          '<ul class="ofensiva-checklist">' +
+          '<li class="' + (o.pomodorosHoje >= 1 ? "ok" : "") + '">' + (o.pomodorosHoje >= 1 ? "✅" : "🍅") + " 1 pomodoro de " + REGRAS.pomodoroMinutos + " min <small>(" + o.pomodorosHoje + "/1)</small>" +
+          (o.pomodorosHoje >= 1 ? "" : ' <button class="link link-inline" data-pomodoro-abrir>começar agora</button>') + "</li>" +
+          '<li class="' + (o.hoje >= o.meta ? "ok" : "") + '">' + (o.hoje >= o.meta ? "✅" : "🧠") + " " + o.meta + " flashcards revisados <small>(" + Math.min(o.hoje, o.meta) + "/" + o.meta + ")</small></li></ul>") +
+      "</div></section>";
   }
 
   function aulasDisponiveis(c) {
@@ -311,11 +325,13 @@
           (S.perfil && S.perfil.is_admin ? '<a href="' + rota("equipe") + '">Equipe</a>' : "")
         : "") +
       '<a href="#/como-funciona">Como funciona</a>' +
-      (S.bruto ? '<a href="#/" class="ofensiva-chip' + (ofensiva > 0 ? " acesa" : "") + '" title="Ofensiva: dias seguidos estudando"><span class="fogo">🔥</span> ' + ofensiva + "</a>" : "") +
+      (S.bruto ? '<button class="pomodoro-chip" id="pomo-chip" title="Pomodoro: ' + REGRAS.pomodoroMinutos + ' minutos de foco">🍅 <span id="pomo-chip-tempo">Foco</span></button>' : "") +
+      (S.bruto ? '<a href="#/" class="ofensiva-chip' + (ofensiva > 0 ? " acesa" : "") + '" title="Ofensiva: dias seguidos com 1 pomodoro e ' + REGRAS.metaDiaria + ' flashcards"><span class="fogo">🔥</span> ' + ofensiva + "</a>" : "") +
       '<a href="#/perfil" class="menu-perfil">' + esc(nome.split(" ")[0]) + "</a>" +
       "</nav></div></header>" +
       '<main class="conteudo">' + conteudo + "</main>";
     efeitos();
+    pomoAtualizar();
   }
 
   // ---------- animações (inspiradas nos componentes do 21st.dev) ----------
@@ -1022,6 +1038,8 @@
     S.bruto.log.push(registro);
     if (!antes.batidaHoje && calcularOfensiva().batidaHoje) {
       toast("🔥 Meta do dia batida! Ofensiva de " + calcularOfensiva().dias + (calcularOfensiva().dias === 1 ? " dia." : " dias."));
+    } else if (antes.hoje + 1 === antes.meta && !antes.pomodorosHoje) {
+      toast("✅ " + antes.meta + " flashcards feitos! Falta 1 pomodoro (🍅 no topo) para acender a ofensiva de hoje.");
     }
     rv.fila.shift();
     if (nota === 1) rv.fila.push(id); // errou: volta no fim da fila desta sessão
@@ -1326,8 +1344,16 @@
       "<p><b>Cada prova tem uma tentativa.</b> Depois de enviar, você vê a explicação de cada questão, e só pode refazer a prova " + REGRAS.refazerProvaDias + " dias depois. Se refizer, vale a <b>melhor nota</b>.</p></section>" +
 
       '<section class="guia-bloco"><h2>🔥 Ofensiva</h2>' +
-      "<p>Igual ao Duolingo: a ofensiva conta quantos <b>dias seguidos</b> você estudou. Um dia vale quando você revisa pelo menos <b>" + REGRAS.metaDiaria + " flashcards</b>, de qualquer aula ou mentoria. A revisão livre também conta.</p>" +
-      "<p>Se você não bateu a meta hoje, a ofensiva ainda não está perdida: ela só zera se você passar um dia inteiro sem estudar. Cinco minutos por dia já mantêm a sequência.</p></section>" +
+      "<p>Igual ao Duolingo: a ofensiva conta quantos <b>dias seguidos</b> você estudou. Um dia só vale quando você faz as <b>duas coisas</b> no mesmo dia:</p>" +
+      "<ul><li><b>1 pomodoro de " + REGRAS.pomodoroMinutos + " minutos</b> (o 🍅 no topo da tela);</li>" +
+      "<li><b>" + REGRAS.metaDiaria + " flashcards</b> revisados, de qualquer aula ou mentoria (a revisão livre também conta).</li></ul>" +
+      "<p>Se você não bateu a meta hoje, a ofensiva ainda não está perdida: ela só zera se você passar um dia inteiro sem cumprir as duas.</p></section>" +
+      '<section class="guia-bloco"><h2>🍅 Pomodoro</h2>' +
+      "<p>O pomodoro é um bloco de <b>" + REGRAS.pomodoroMinutos + " minutos de foco total</b> em uma coisa só, seguido de " + REGRAS.pausaMinutos + " minutos de pausa. Ajuda quem se distrai fácil a começar, e ajuda quem é focado a não passar do ponto.</p>" +
+      "<ul><li>Clique no <b>🍅</b> do topo e em <b>Começar</b>. O tempo continua contando se você trocar de tela ou recarregar a página.</li>" +
+      "<li>Antes de começar: celular longe, uma aba aberta e um objetivo claro (ex.: \"revisar os cards da Aula 3\" ou \"executar a parte prática 2\").</li>" +
+      "<li>Pode pausar se for interrompido. Se cancelar, ele não conta. Só o pomodoro que chega até o fim é registrado.</li>" +
+      "<li>Pode fazer quantos quiser por dia, mas para a ofensiva basta 1.</li></ul></section>" +
 
       '<section class="guia-bloco"><h2>🏆 Ranking</h2>' +
       "<p>Cada mentoria tem o seu ranking, só com as pessoas daquela mentoria. A posição é definida pela <b>média das provas</b> (a melhor nota de cada prova). Em caso de empate, ganha quem fez mais provas e depois quem tem a maior ofensiva. Também tem um ranking separado só das maiores ofensivas.</p>" +
@@ -1453,7 +1479,7 @@
     const P = PONTOS, of = P.ofensiva || {};
     return '<table class="tabela"><thead><tr><th>Ação</th><th>XP</th><th>Regra</th></tr></thead><tbody>' +
       "<tr><td>Revisar um flashcard</td><td>" + P.revisao + "</td><td>Até " + P.limiteDia + " XP por dia. A revisão livre vale metade.</td></tr>" +
-      "<tr><td>Bater a meta do dia (" + REGRAS.metaDiaria + " cards)</td><td>+" + P.meta + "</td><td>Uma vez por dia</td></tr>" +
+      "<tr><td>Bater a meta do dia (1 pomodoro + " + REGRAS.metaDiaria + " cards)</td><td>+" + P.meta + "</td><td>Uma vez por dia</td></tr>" +
       "<tr><td>Ofensiva de " + Object.keys(of).join(", ") + " dias</td><td>+" + Object.keys(of).map(function (k) { return of[k]; }).join(", +") + "</td><td>Dias seguidos batendo a meta, dentro da temporada</td></tr>" +
       "<tr><td>Card dominado</td><td>" + P.dominado + "</td><td>Card que você lembra há 7 dias ou mais</td></tr>" +
       "<tr><td>Parte prática executada</td><td>" + P.pratica + "</td><td>Com o relato do que fez. O organizador pode conferir.</td></tr>" +
@@ -1698,8 +1724,8 @@
       (porOfensiva.length
         ? '<div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr><th>#</th><th>Pessoa</th><th>Ofensiva</th></tr></thead><tbody>' +
           porOfensiva.map(linhaOfensiva).join("") + "</tbody></table></div>"
-        : '<p class="muted">Ninguém está com ofensiva ativa agora. Revise ' + REGRAS.metaDiaria + " flashcards hoje e seja o primeiro.</p>") +
-      '<p class="muted pequeno">Ofensiva = dias seguidos revisando pelo menos ' + REGRAS.metaDiaria + " flashcards, em qualquer mentoria.</p></section>"
+        : '<p class="muted">Ninguém está com ofensiva ativa agora. Faça 1 pomodoro e revise ' + REGRAS.metaDiaria + " flashcards hoje e seja o primeiro.</p>") +
+      '<p class="muted pequeno">Ofensiva = dias seguidos com pelo menos 1 pomodoro e ' + REGRAS.metaDiaria + " flashcards revisados, em qualquer mentoria.</p></section>"
     );
   }
 
@@ -1774,6 +1800,208 @@
     };
   }
 
+  // ---------- pomodoro ----------
+  // Bloco de foco de REGRAS.pomodoroMinutos. O estado fica no localStorage com horários absolutos,
+  // então o timer continua certo ao trocar de tela, recarregar ou fechar a aba.
+  // Só o pomodoro concluído é gravado no banco (que confere se o tempo passou de verdade).
+  const POMO_CHAVE = "academy-pomodoro", POMO_PENDENTES = "academy-pomodoro-pendentes";
+  let pomoAberto = false, pomoConfirmar = false, pomoSom = null;
+
+  function lerJSON(chave) { try { return JSON.parse(localStorage.getItem(chave) || "null"); } catch (e) { return null; } }
+  function gravarJSON(chave, v) { try { if (v == null) localStorage.removeItem(chave); else localStorage.setItem(chave, JSON.stringify(v)); } catch (e) { /* sem storage */ } }
+
+  function pomoEstado() {
+    const e = lerJSON(POMO_CHAVE);
+    return e && S.session && e.uid === S.session.user.id ? e : null;
+  }
+  function pomoRestante(e) { return e.pausadoRestante != null ? e.pausadoRestante : Math.max(0, e.fimEm - Date.now()); }
+  function relogio(ms) { const s = Math.ceil(ms / 1000); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
+  function pomodorosHoje() {
+    const hoje = diaLocal(new Date());
+    return ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) { return diaLocal(p.concluido_em) === hoje; }).length;
+  }
+
+  // Bipe curto pelo WebAudio (liberado no clique de começar, porque o navegador exige um gesto)
+  function pomoBipe() {
+    try {
+      pomoSom = pomoSom || new (window.AudioContext || window.webkitAudioContext)();
+      [0, 0.35, 0.7].forEach(function (t) {
+        const o = pomoSom.createOscillator(), g = pomoSom.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(pomoSom.destination);
+        g.gain.setValueAtTime(0.0001, pomoSom.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.3, pomoSom.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, pomoSom.currentTime + t + 0.25);
+        o.start(pomoSom.currentTime + t); o.stop(pomoSom.currentTime + t + 0.3);
+      });
+    } catch (e) { /* sem áudio */ }
+  }
+
+  function pomoComecar(fase) {
+    const min = fase === "pausa" ? REGRAS.pausaMinutos : REGRAS.pomodoroMinutos;
+    try { pomoSom = pomoSom || new (window.AudioContext || window.webkitAudioContext)(); if (pomoSom.resume) pomoSom.resume(); } catch (e) { /* sem áudio */ }
+    gravarJSON(POMO_CHAVE, { uid: S.session.user.id, fase: fase, minutos: min, inicio: Date.now(), fimEm: Date.now() + min * 60000, pausadoRestante: null });
+    pomoConfirmar = false;
+    pomoAtualizar();
+  }
+
+  async function pomoSalvar(item) {
+    const r = await sb.from(T.pomodoros).insert({ minutos: item.minutos, iniciado_em: item.iniciado_em });
+    if (r.error) throw r.error;
+    S.bruto.pomodoros.push({ minutos: item.minutos, iniciado_em: item.iniciado_em, concluido_em: new Date().toISOString() });
+  }
+
+  // Grava os pomodoros que terminaram sem internet (ou com a aba fechada) assim que der
+  async function pomoEnviarPendentes() {
+    if (!S.session || !S.bruto) return;
+    const todos = lerJSON(POMO_PENDENTES) || [];
+    const meus = todos.filter(function (p) { return p.uid === S.session.user.id; });
+    if (!meus.length) return;
+    const sobra = todos.filter(function (p) { return p.uid !== S.session.user.id; });
+    for (const p of meus) {
+      try { await pomoSalvar(p); }
+      catch (e) {
+        // Mais de 1 dia ou recusado pelo banco: descarta; erro de rede: tenta de novo depois
+        if (!/incompleto|antigo/i.test(e.message || "") && Date.now() - Date.parse(p.iniciado_em) < DIA) sobra.push(p);
+      }
+    }
+    gravarJSON(POMO_PENDENTES, sobra.length ? sobra : null);
+    pomoAtualizarOfensiva();
+  }
+
+  async function pomoConcluir(e) {
+    gravarJSON(POMO_CHAVE, { uid: e.uid, fase: "feito" });
+    pomoAberto = true;
+    pomoBipe();
+    const item = { uid: e.uid, minutos: e.minutos, iniciado_em: new Date(e.inicio).toISOString() };
+    try {
+      await pomoSalvar(item);
+      const o = calcularOfensiva();
+      toast(o.batidaHoje ? "Pomodoro concluído! Ofensiva do dia garantida 🔥" :
+        "Pomodoro concluído! Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva.", "ok");
+      if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) confete();
+    } catch (err) {
+      const fila = lerJSON(POMO_PENDENTES) || [];
+      fila.push(item);
+      gravarJSON(POMO_PENDENTES, fila);
+      toast("Pomodoro concluído, mas não consegui salvar agora. Vou tentar de novo sozinho.", "erro");
+    }
+    pomoAtualizarOfensiva();
+    pomoAtualizar();
+  }
+
+  // Atualiza o 🔥 do topo e o bloco da ofensiva sem redesenhar a tela (não atrapalha uma revisão em andamento)
+  function pomoAtualizarOfensiva() {
+    if (!S.bruto) return;
+    const o = calcularOfensiva();
+    const chip = document.querySelector(".ofensiva-chip");
+    if (chip) {
+      chip.classList.toggle("acesa", o.dias > 0);
+      chip.innerHTML = '<span class="fogo">🔥</span> ' + o.dias;
+    }
+    const bloco = document.querySelector(".ofensiva");
+    if (bloco) bloco.outerHTML = blocoOfensiva();
+  }
+
+  function pomoPainelHTML(e) {
+    const hoje = pomodorosHoje();
+    const contagem = '<p class="pomo-hoje">Hoje: <b>' + hoje + "</b> pomodoro" + (hoje === 1 ? "" : "s") + " concluído" + (hoje === 1 ? "" : "s") +
+      (hoje ? " ✅" : " · a ofensiva do dia pede pelo menos 1") + "</p>";
+    let corpo;
+    if (!e) {
+      corpo = '<p class="pomo-texto">' + REGRAS.pomodoroMinutos + " minutos de foco em uma coisa só: celular longe, uma aba aberta, sem responder mensagem. " +
+        "No fim, " + REGRAS.pausaMinutos + " minutos de pausa.</p>" + contagem +
+        '<button class="btn btn-primario btn-largo" data-pomo="foco">Começar ' + REGRAS.pomodoroMinutos + " min de foco</button>";
+    } else if (e.fase === "feito") {
+      corpo = '<div class="pomo-feito">🍅</div><p class="pomo-texto"><b>Pomodoro concluído!</b> Levante, beba água e descanse a cabeça antes do próximo.</p>' + contagem +
+        '<div class="pomo-acoes"><button class="btn btn-primario" data-pomo="pausa">Pausa de ' + REGRAS.pausaMinutos + " min</button>" +
+        '<button class="btn btn-secundario" data-pomo="foco">Novo pomodoro</button></div>';
+    } else {
+      const rest = pomoRestante(e), total = e.minutos * 60000;
+      const pct = Math.round((1 - rest / total) * 100);
+      const pausado = e.pausadoRestante != null;
+      corpo = '<div class="pomo-anel' + (e.fase === "pausa" ? " pausa" : "") + '" style="--p:' + pct + '"><div><b id="pomo-tempo">' + relogio(rest) + "</b><span>" +
+        (e.fase === "pausa" ? "pausa" : pausado ? "pausado" : "foco") + "</span></div></div>" +
+        (e.fase === "pausa"
+          ? '<p class="pomo-texto">Descanse longe da tela. O próximo pomodoro começa quando você quiser.</p>' +
+            '<div class="pomo-acoes"><button class="btn btn-secundario" data-pomo="pular">Pular pausa</button></div>'
+          : '<p class="pomo-texto">Pode navegar pela plataforma à vontade: o tempo continua contando.</p>' + contagem +
+            '<div class="pomo-acoes"><button class="btn btn-secundario" data-pomo="' + (pausado ? "retomar" : "pausar") + '">' + (pausado ? "▶ Retomar" : "⏸ Pausar") + "</button>" +
+            '<button class="btn btn-secundario btn-perigo" data-pomo="cancelar">' + (pomoConfirmar ? "Confirmar: cancelar" : "Cancelar") + "</button></div>" +
+            (pomoConfirmar ? '<p class="pomo-aviso">Cancelando, este pomodoro não conta para a ofensiva.</p>' : ""));
+    }
+    return '<div class="pomo-cabeca"><h3>🍅 Pomodoro</h3><button class="pomo-fechar" data-pomo="fechar" aria-label="Fechar">×</button></div>' + corpo;
+  }
+
+  // Roda a cada segundo: atualiza chip, painel e título da aba, e percebe quando o tempo acabou
+  function pomoAtualizar() {
+    const e = pomoEstado();
+    const ativo = e && (e.fase === "foco" || e.fase === "pausa");
+    if (ativo && e.pausadoRestante == null && Date.now() >= e.fimEm) {
+      if (e.fase === "foco") { pomoConcluir(e); return; }
+      gravarJSON(POMO_CHAVE, null);
+      pomoBipe();
+      toast("Fim da pausa. Bora para o próximo pomodoro?", "ok");
+      pomoAtualizar();
+      return;
+    }
+    const chip = document.getElementById("pomo-chip");
+    if (chip) {
+      chip.classList.toggle("ativo", !!ativo && e.fase === "foco");
+      chip.classList.toggle("pausa", !!ativo && e.fase === "pausa");
+      chip.classList.toggle("feito", pomodorosHoje() > 0 && !ativo);
+      document.getElementById("pomo-chip-tempo").textContent = ativo ? relogio(pomoRestante(e)) : pomodorosHoje() ? pomodorosHoje() + " hoje" : "Foco";
+    }
+    if (!document.body.dataset.tituloBase) document.body.dataset.tituloBase = document.title;
+    document.title = ativo ? "🍅 " + relogio(pomoRestante(e)) + " · " + document.body.dataset.tituloBase : document.body.dataset.tituloBase;
+
+    let painel = document.getElementById("pomo-painel");
+    if (!pomoAberto || !S.session || !S.bruto) { if (painel) painel.remove(); return; }
+    if (!painel) {
+      painel = document.createElement("aside");
+      painel.id = "pomo-painel";
+      painel.className = "pomo-painel";
+      document.body.appendChild(painel);
+    }
+    // Só o relógio muda a cada segundo; o resto do painel é redesenhado quando o estado muda
+    const assinatura = JSON.stringify([e, pomoConfirmar, pomodorosHoje()]);
+    if (painel.dataset.assinatura !== assinatura || !ativo) {
+      if (painel.dataset.assinatura !== assinatura) painel.innerHTML = pomoPainelHTML(e);
+      painel.dataset.assinatura = assinatura;
+    }
+    if (ativo) {
+      const rest = pomoRestante(e);
+      const t = document.getElementById("pomo-tempo");
+      if (t) t.textContent = relogio(rest);
+      const anel = painel.querySelector(".pomo-anel");
+      if (anel) anel.style.setProperty("--p", Math.round((1 - rest / (e.minutos * 60000)) * 100));
+    }
+  }
+
+  document.addEventListener("click", function (ev) {
+    if (ev.target.closest("#pomo-chip, [data-pomodoro-abrir]")) {
+      pomoAberto = !ev.target.closest("#pomo-chip") || !pomoAberto;
+      pomoConfirmar = false;
+      pomoAtualizar();
+      return;
+    }
+    const b = ev.target.closest("[data-pomo]");
+    if (!b) return;
+    const acao = b.dataset.pomo, e = pomoEstado();
+    if (acao === "fechar") { pomoAberto = false; pomoConfirmar = false; }
+    else if (acao === "foco" || acao === "pausa") pomoComecar(acao);
+    else if (acao === "pular") gravarJSON(POMO_CHAVE, null);
+    else if (acao === "pausar" && e) { e.pausadoRestante = pomoRestante(e); gravarJSON(POMO_CHAVE, e); }
+    else if (acao === "retomar" && e) { e.fimEm = Date.now() + e.pausadoRestante; e.pausadoRestante = null; gravarJSON(POMO_CHAVE, e); }
+    else if (acao === "cancelar") {
+      if (!pomoConfirmar) pomoConfirmar = true;
+      else { gravarJSON(POMO_CHAVE, null); pomoConfirmar = false; toast("Pomodoro cancelado."); }
+    }
+    pomoAtualizar();
+  });
+  // Outra aba mexeu no pomodoro: acompanha na hora
+  window.addEventListener("storage", function (ev) { if (ev.key === POMO_CHAVE) pomoAtualizar(); });
+  setInterval(pomoAtualizar, 1000);
+
   // ---------- roteador ----------
 
   async function rotear() {
@@ -1786,6 +2014,7 @@
         app.innerHTML = '<div class="carregando">Carregando…</div>';
         await carregarPerfil();
         await carregarDados();
+        pomoEnviarPendentes();
       }
       const partes = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
       S.noCurso = partes[0] === "c";
