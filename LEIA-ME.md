@@ -31,6 +31,8 @@ Aprovado na aula com nota **70 ou mais**, tendo feito as duas provas. O certific
 
 **Relatório de estudo:** a tela `#/relatorio` mostra horas de estudo, pomodoros e flashcards dos últimos 7 ou 30 dias, com gráfico por dia e resumo para copiar. Horas de estudo = minutos dos pomodoros + tempo estimado nos cards fora de um pomodoro (intervalo entre cards, até 5 min). O ranking de foco da equipe vem da função `academy_foco` (`supabase/relatorio.sql`) e também aparece no Ranking de cada mentoria, com a semana atual.
 
+**Aulas só com pomodoro e dispersão:** com `aulaSoComPomodoro` (no `content/curso.js`) as rotas da aula mostram um portão até a pessoa começar um pomodoro (admins passam direto com `adminsSemPortao`). O pomodoro tem dois tipos: `estudo` (o navegador mede o tempo fora da aba/janela, avisa depois de `alertaForaSegundos` e marca como disperso com `limiteForaMinutos`) e `execucao` (parte prática fora da plataforma, sem medir). O tempo fora vai nas colunas `fora_segundos` e `saidas` de `academy_pomodoros` e aparece no Relatório (índice de foco e ranking de quem menos se dispersou). A medição é feita pelo navegador, então serve como acompanhamento, não como prova.
+
 **Temporadas (competição de 90 dias):** ficam em `TEMPORADAS`, no `content/curso.js`. Cada temporada tem a mentoria, as datas, os prêmios e se os administradores disputam. Os pontos (XP) ficam em `TEMPORADA_PONTOS` e os níveis em `TEMPORADA_NIVEIS`. O placar é calculado pela função `academy_temporada` no Supabase (`supabase/temporada.sql`). Para a próxima temporada, basta preencher os prêmios dela.
 
 **Versão das provas:** `versaoProvas` no `content/curso.js`. Se as perguntas forem trocadas, aumente esse número: as tentativas antigas deixam de contar na nota.
