@@ -196,6 +196,31 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .semana-titulo { font-weight: 700; }
 .semana-ver { margin-left: auto; font-weight: 700; color: var(--verde-escuro); }
 
+/* Feedback para quem travou */
+.trava { border-left: 4px solid var(--verde); margin-bottom: 1.5rem; }
+.trava-cabeca { display: flex; gap: 1rem; align-items: flex-start; }
+.trava-icone { font-size: 2.4rem; line-height: 1; }
+.trava-cabeca h2 { margin-bottom: .3rem; }
+.trava-cabeca p { margin: 0; }
+.trava-opcoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-top: 1.1rem; }
+.trava-opcao {
+  display: flex; align-items: center; gap: .6rem; text-align: left; background: var(--fundo); border: 1px solid var(--borda); border-radius: 12px;
+  padding: .8rem 1rem; font: 600 .95rem var(--fonte-texto); color: var(--texto); cursor: pointer; transition: .15s;
+}
+.trava-opcao span { font-size: 1.3rem; }
+.trava-opcao:hover:not(:disabled) { border-color: var(--verde); background: var(--verde-claro); }
+.trava-opcao:disabled { opacity: .5; cursor: wait; }
+.trava.respondida h3 { font-size: 1.3rem; margin-top: .2rem; }
+.trava.respondida ol, .trava.respondida ul { padding-left: 1.2rem; }
+.trava.respondida li { margin-bottom: .35rem; }
+.trava .linha-botoes { justify-content: flex-start; }
+.trava-exemplo { background: var(--fundo); border-radius: 10px; padding: .7rem 1rem; margin: .5rem 0; }
+.trava-exemplo p { margin: .2rem 0 0; font-size: .92rem; color: var(--muted); }
+.semana-resumo.marco { border-left: 4px solid #f5a524; }
+.semana-resumo.marco.atrasado { border-left-color: var(--erro); }
+.travas-contagem { display: flex; flex-wrap: wrap; gap: .4rem; }
+.painel-travas { margin-top: 1.5rem; }
+
 /* Relatório de estudo */
 .relatorio-topo { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .relatorio-topo h1 { margin: 0; }
@@ -449,6 +474,8 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .pomodoro-chip { font-size: .8rem; }
   .pomo-painel { top: auto; bottom: 16px; }
   .relatorio-grade { grid-template-columns: 1fr; }
+  .trava-opcoes { grid-template-columns: 1fr; }
+  .trava-icone { display: none; }
   .portao { padding: 1.4rem 1rem; }
   .portao .pomo-tipos { grid-template-columns: 1fr; }
   .relatorio-hero .hero-stats { display: grid; grid-template-columns: 1fr 1fr; }
