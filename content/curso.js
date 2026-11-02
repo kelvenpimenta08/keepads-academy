@@ -13,6 +13,9 @@
     adminsSemPortao: false,  // true = administradores entram nas aulas sem pomodoro (para revisar o conteúdo)
     alertaForaSegundos: 60,  // no pomodoro de estudo, avisa depois de tantos segundos fora da plataforma
     limiteForaMinutos: 5,    // pomodoro de estudo com tanto tempo fora (somado) fica marcado como disperso
+    travaDiasParado: 2,     // dias sem estudar para perguntar "O que impediu o próximo passo?"
+    travaDiasAula: 7,       // dias sem mexer numa aula começada (e não aprovada) para perguntar
+    travaPerguntarDeNovo: 3, // depois de responder, só pergunta de novo depois de tantos dias
     refazerProvaDias: 30    // dias de espera para refazer uma prova (o banco também garante essa regra)
   };
 
