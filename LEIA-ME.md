@@ -29,6 +29,8 @@ Aprovado na aula com nota **70 ou mais**, tendo feito as duas provas. O certific
 
 **Pomodoro:** o 🍅 no topo abre um timer de 30 minutos (pausa sugerida de 5). O timer fica no navegador com horários absolutos, então continua certo ao trocar de tela ou recarregar. Só o pomodoro concluído vai para a tabela `academy_pomodoros` (`supabase/pomodoro.sql`), e o banco confere se os 30 minutos passaram de verdade. A ofensiva do ranking e a meta do dia da temporada também exigem o pomodoro.
 
+**Relatório de estudo:** a tela `#/relatorio` mostra horas de estudo, pomodoros e flashcards dos últimos 7 ou 30 dias, com gráfico por dia e resumo para copiar. Horas de estudo = minutos dos pomodoros + tempo estimado nos cards fora de um pomodoro (intervalo entre cards, até 5 min). O ranking de foco da equipe vem da função `academy_foco` (`supabase/relatorio.sql`) e também aparece no Ranking de cada mentoria, com a semana atual.
+
 **Temporadas (competição de 90 dias):** ficam em `TEMPORADAS`, no `content/curso.js`. Cada temporada tem a mentoria, as datas, os prêmios e se os administradores disputam. Os pontos (XP) ficam em `TEMPORADA_PONTOS` e os níveis em `TEMPORADA_NIVEIS`. O placar é calculado pela função `academy_temporada` no Supabase (`supabase/temporada.sql`). Para a próxima temporada, basta preencher os prêmios dela.
 
 **Versão das provas:** `versaoProvas` no `content/curso.js`. Se as perguntas forem trocadas, aumente esse número: as tentativas antigas deixam de contar na nota.
