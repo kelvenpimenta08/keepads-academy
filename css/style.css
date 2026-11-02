@@ -129,6 +129,9 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .topo .logo-img { height: 44px; }
 .menu { display: flex; gap: 1.2rem; align-items: center; margin-left: auto; }
 .topo-chips { display: flex; gap: .5rem; align-items: center; }
+/* Peças do menu lateral: só aparecem no celular */
+.menu-cabeca, .menu-botao, .menu-fundo, .menu-so-celular, .menu-icone { display: none; }
+.menu a.atual { color: #fff; }
 .topo-chips a { color: rgba(255, 255, 255, .85); text-decoration: none; font-size: .88rem; font-weight: 500; }
 .menu a { color: rgba(255, 255, 255, .78); text-decoration: none; font-size: .88rem; font-weight: 500; }
 .menu a:hover { color: #fff; }
@@ -477,11 +480,65 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 
 /* Celular */
 @media (max-width: 760px) {
-  .topo-in { flex-wrap: wrap; row-gap: .4rem; }
-  .menu { width: 100%; overflow-x: auto; scrollbar-width: none; order: 3; margin-left: 0; }
-  .topo-chips { order: 2; margin-left: auto; }
-  .menu::-webkit-scrollbar { display: none; }
-  .menu a { white-space: nowrap; }
+  /* Topo compacto numa linha só: logo pequena, 🍅, 🔥 e o botão ☰ */
+  body { font-size: 16px; }
+  .topo-in { flex-wrap: nowrap; padding: .55rem 12px; gap: .5rem; }
+  .topo .logo-img { height: 30px; }
+  .topo-chips { margin-left: auto; gap: .35rem; }
+  .topo-chips .menu-perfil { display: none; }
+  .pomodoro-chip, .ofensiva-chip { padding: .35rem .6rem; font-size: .82rem !important; }
+  .menu-botao {
+    display: grid; align-content: center; gap: 4px; width: 40px; height: 40px; padding: 0 10px;
+    background: rgba(255, 255, 255, .1); border: 0; border-radius: 12px; cursor: pointer;
+  }
+  .menu-botao span { display: block; height: 2px; border-radius: 2px; background: #fff; }
+
+  /* Menu lateral (gaveta) que desliza da direita */
+  .menu {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(300px, 84vw); margin: 0; z-index: 70;
+    flex-direction: column; align-items: stretch; gap: .15rem; padding: .9rem .8rem 1.5rem;
+    background: #141414; box-shadow: -12px 0 32px rgba(0, 0, 0, .35); overflow-y: auto; overscroll-behavior: contain;
+    transform: translateX(105%); transition: transform .25s ease; visibility: hidden;
+  }
+  body.menu-aberto .menu { transform: none; visibility: visible; }
+  body.menu-aberto { overflow: hidden; }
+  .menu-cabeca { display: flex; justify-content: space-between; align-items: center; padding: .3rem .4rem .9rem; margin-bottom: .3rem; border-bottom: 1px solid rgba(255, 255, 255, .1); }
+  .menu-cabeca b { display: block; color: #fff; font-size: 1.1rem; }
+  .menu-cabeca span { font-family: var(--fonte-rotulo); font-size: .75rem; color: var(--verde); }
+  .menu-fechar { background: rgba(255, 255, 255, .1); border: 0; color: #fff; width: 38px; height: 38px; border-radius: 10px; font-size: 1.5rem; line-height: 1; cursor: pointer; }
+  .menu a, .menu a:not(.menu-perfil) { display: flex; align-items: center; gap: .75rem; font-size: 1rem; padding: .8rem .8rem; border-radius: 12px; color: rgba(255, 255, 255, .82); white-space: nowrap; }
+  .menu a.atual { background: rgba(0, 202, 158, .16); color: #fff; font-weight: 600; }
+  .menu-icone { display: inline-block; width: 1.4rem; text-align: center; }
+  .menu-so-celular { display: flex; }
+  .menu-fundo { display: block; position: fixed; inset: 0; z-index: 65; background: rgba(0, 0, 0, .5); opacity: 0; pointer-events: none; transition: opacity .25s; }
+  body.menu-aberto .menu-fundo { opacity: 1; pointer-events: auto; }
+
+  /* Conteúdo mais enxuto */
+  .conteudo { padding: 1rem 12px 3rem; }
+  .painel { padding: 1rem; border-radius: 14px; }
+  .painel h2, .guia-bloco h2 { font-size: 1.2rem; }
+  .hero { border-radius: 16px; margin-bottom: 1rem; }
+  .hero-cursos .hero-kicker { display: none; }
+  .hero p { font-size: .92rem; }
+  .trava { padding: 1rem; margin-bottom: 1rem; }
+  .trava-cabeca h2 { font-size: 1.2rem; }
+  .trava-cabeca p { font-size: .9rem; }
+  .trava .hero-kicker { display: none; }
+  .trava-opcoes { grid-template-columns: 1fr 1fr !important; gap: .45rem; margin-top: .8rem; }
+  .trava-opcao { padding: .6rem .65rem; font-size: .85rem; gap: .45rem; line-height: 1.25; }
+  .trava-opcao span { font-size: 1.05rem; }
+  .ofensiva { margin-bottom: 1rem; gap: .5rem; }
+  .ofensiva-fogo { font-size: 2rem; }
+  .ofensiva-numero b { font-size: 1.7rem; }
+  .instalar { margin-bottom: 1rem; padding: .75rem .85rem; }
+  .instalar-icone { width: 40px; height: 40px; }
+  .banner-temporada { margin-bottom: 1rem; }
+  .semana-resumo { margin: -.2rem 0 1rem; font-size: .9rem; }
+  .curso-capa { height: 96px !important; }
+  .curso-iniciais { font-size: 2.6rem; }
+  .curso-info { padding: 1rem 1.1rem 1.1rem; }
+  .curso-info h2 { font-size: 1.2rem; }
+  .grade-cursos { gap: .9rem; }
   .guia-botoes { grid-template-columns: 1fr; }
   .grade-cursos { grid-template-columns: 1fr; }
   .ofensiva { grid-template-columns: 1fr; padding: 1rem; }
@@ -500,9 +557,6 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .auth-hero { padding: 2rem 16px; }
   .auth-hero h1 { font-size: 1.5rem; margin-top: 1rem; }
   .auth-card { padding: 2rem 16px; }
-  .menu { gap: .8rem; }
-  .menu a:not(.menu-perfil) { font-size: .8rem; }
-  .pomodoro-chip { font-size: .8rem; }
   .pomo-painel { top: auto; bottom: 16px; }
   .relatorio-grade { grid-template-columns: 1fr; }
   .trava-opcoes { grid-template-columns: 1fr; }
@@ -520,8 +574,8 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .semana-ver { margin-left: 0; }
   .graf { height: 140px; gap: .3rem; }
   .logo-sub { display: none; }
-  .hero { flex-direction: column; align-items: stretch; padding: 1.4rem; }
-  .hero h1 { font-size: 1.5rem; }
+  .hero { flex-direction: column; align-items: stretch; padding: 1.1rem 1.2rem; gap: 1rem; }
+  .hero h1 { font-size: 1.3rem; }
   .hero-stats div { flex: 1; min-width: 0; }
   .grade-aulas { grid-template-columns: 1fr; }
   .aula-cabeca { flex-direction: column; }
