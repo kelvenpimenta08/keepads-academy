@@ -204,13 +204,18 @@
   // ---------- ofensiva (estilo Duolingo) ----------
   // Um dia conta quando a pessoa faz pelo menos 1 pomodoro E revisa pelo menos REGRAS.metaDiaria
   // flashcards, de qualquer aula ou curso. O ranking e a temporada usam a mesma regra no banco.
+  function pomodoroDisperso(p) {
+    return (p.tipo || "estudo") === "estudo" && (p.fora_segundos || 0) >= REGRAS.limiteForaMinutos * 60;
+  }
+
   function calcularOfensiva() {
     const porDia = {}, focoPorDia = {};
     ((S.bruto && S.bruto.log) || []).forEach(function (l) {
       const d = diaLocal(l.reviewed_at);
       porDia[d] = (porDia[d] || 0) + 1;
     });
-    ((S.bruto && S.bruto.pomodoros) || []).forEach(function (p) {
+    // Pomodoro disperso (muito tempo fora da plataforma) não conta para a ofensiva
+    ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) { return !pomodoroDisperso(p); }).forEach(function (p) {
       const d = diaLocal(p.concluido_em);
       focoPorDia[d] = (focoPorDia[d] || 0) + 1;
     });
@@ -1364,7 +1369,7 @@
       '<section class="guia-bloco"><h2>🔒 Aulas só com pomodoro e tempo disperso</h2>' +
       "<p>As aulas (resumo, áudio, flashcards, parte prática e provas) só abrem com um pomodoro rodando. Ao clicar em <b>Revisar agora</b> ou <b>Abrir aula</b> sem pomodoro, você escolhe o tipo e entra na hora:</p>" +
       "<ul><li><b>🎧 Estudo:</b> para estudar dentro da plataforma. Se você sair para outra aba ou programa, o tempo fora é medido. " +
-      "Depois de " + REGRAS.alertaForaSegundos + " segundos fora chega um aviso (permita as notificações do navegador), e com " + REGRAS.limiteForaMinutos + " minutos fora, somados, o pomodoro fica marcado como <b>disperso</b>. Ele continua contando para a ofensiva.</li>" +
+      "Depois de " + REGRAS.alertaForaSegundos + " segundos fora chega um aviso (permita as notificações do navegador), e com " + REGRAS.limiteForaMinutos + " minutos fora, somados, o pomodoro fica marcado como <b>disperso</b> e <b>não conta para a ofensiva</b> (aparece no relatório, mas não vale como o pomodoro do dia).</li>" +
       "<li><b>🛠️ Execução prática:</b> para executar a parte prática em outras ferramentas (Claude, Gerenciador de Anúncios etc.). O tempo fora não é medido.</li></ul>" +
       "<p>No Relatório aparecem o seu <b>índice de foco</b> (quanto do pomodoro de estudo você ficou na plataforma), o tempo fora, as saídas e o ranking de quem menos se dispersou.</p></section>" +
 
@@ -1585,7 +1590,7 @@
     layout('<div class="painel centro"><p>Carregando a temporada…</p></div>');
     const r = await sb.rpc("academy_temporada", {
       p_curso: curso.id, p_inicio: t.inicio, p_fim: t.fim, p_versao: curso.versaoProvas,
-      p_regras: Object.assign({}, PONTOS, { metaDiaria: REGRAS.metaDiaria, notaMinima: curso.notaMinima, pesos: curso.pesos }),
+      p_regras: Object.assign({}, PONTOS, { metaDiaria: REGRAS.metaDiaria, limiteFora: REGRAS.limiteForaMinutos * 60, notaMinima: curso.notaMinima, pesos: curso.pesos }),
       p_praticas: praticas
     });
     if (r.error) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(r.error)) + "</p></div>"); return; }
@@ -2135,7 +2140,7 @@
       if (jaFora < limite) {
         pomoAlertas.push(setTimeout(function () {
           const x = pomoEstado();
-          if (pomoVigiado(x) && x.saiuEm) pomoNotificar("⚠️ " + REGRAS.limiteForaMinutos + " minutos fora da plataforma", "Este pomodoro vai ficar marcado como disperso no seu relatório.");
+          if (pomoVigiado(x) && x.saiuEm) pomoNotificar("⚠️ " + REGRAS.limiteForaMinutos + " minutos fora da plataforma", "Este pomodoro ficou disperso e não vai contar para a ofensiva. Volte e faça o próximo com foco.");
         }, limite - jaFora));
       }
     } else if (!fora && e.saiuEm) {
@@ -2186,8 +2191,9 @@
       await pomoSalvar(item);
       const o = calcularOfensiva();
       const disperso = foraSeg >= REGRAS.limiteForaMinutos * 60;
-      toast((disperso ? "Pomodoro concluído, mas disperso: " + tempoTxt(foraSeg) + " fora da plataforma. " : "Pomodoro concluído! ") +
-        (o.batidaHoje ? "Ofensiva do dia garantida 🔥" : "Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva."), disperso ? "erro" : "ok");
+      toast(disperso
+        ? "Pomodoro disperso: " + tempoTxt(foraSeg) + " fora da plataforma. Ele não conta para a ofensiva" + (o.pomodorosHoje ? " (mas você já tem um válido hoje)." : ": faça outro com foco.")
+        : "Pomodoro concluído! " + (o.batidaHoje ? "Ofensiva do dia garantida 🔥" : o.hoje >= o.meta ? "" : "Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva."), disperso ? "erro" : "ok");
       if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) confete();
     } catch (err) {
       const fila = lerJSON(POMO_PENDENTES) || [];
@@ -2219,9 +2225,10 @@
   }
 
   function pomoPainelHTML(e) {
-    const hoje = pomodorosHoje();
+    const hoje = pomodorosHoje(), validos = calcularOfensiva().pomodorosHoje, disp = hoje - validos;
     const contagem = '<p class="pomo-hoje">Hoje: <b>' + hoje + "</b> pomodoro" + (hoje === 1 ? "" : "s") + " concluído" + (hoje === 1 ? "" : "s") +
-      (hoje ? " ✅" : " · a ofensiva do dia pede pelo menos 1") + "</p>";
+      (disp ? " (" + disp + " disperso" + (disp === 1 ? "" : "s") + ", não conta" + (disp === 1 ? "" : "m") + ")" : "") +
+      (validos ? " ✅" : " · a ofensiva do dia pede pelo menos 1 sem dispersão") + "</p>";
     let corpo;
     if (!e) {
       corpo = '<p class="pomo-texto">' + REGRAS.pomodoroMinutos + " minutos de foco em uma coisa só: celular longe, uma aba aberta, sem responder mensagem. " +
@@ -2231,7 +2238,7 @@
       corpo = '<div class="pomo-feito">🍅</div><p class="pomo-texto"><b>Pomodoro concluído!</b> Levante, beba água e descanse a cabeça antes do próximo.</p>' +
         (e.tipo !== "execucao" && e.foraSeg != null
           ? '<p class="pomo-fora' + (disperso ? " disperso" : "") + '">' + (e.foraSeg < 10 ? "🎯 Sem sair da plataforma. Foco total!" :
-            "👀 " + tempoTxt(e.foraSeg).replace(/^0 min$/, "menos de 1 min") + " fora da plataforma em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") + (disperso ? " · pomodoro disperso" : "")) + "</p>"
+            "👀 " + tempoTxt(e.foraSeg).replace(/^0 min$/, "menos de 1 min") + " fora da plataforma em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") + (disperso ? " · pomodoro disperso, não conta para a ofensiva" : "")) + "</p>"
           : "") + contagem +
         '<div class="pomo-acoes"><button class="btn btn-primario" data-pomo="pausa">Pausa de ' + REGRAS.pausaMinutos + " min</button></div>" +
         '<p class="pomo-hoje pomo-ou">ou comece o próximo:</p>' + botoesPomodoro(true);
@@ -2249,7 +2256,8 @@
               : '<p class="pomo-texto">🎧 <b>Estudo.</b> Fique na plataforma: sair para outra aba ou programa conta como tempo disperso.</p>' +
                 '<p class="pomo-fora' + ((e.foraMs || 0) >= REGRAS.limiteForaMinutos * 60000 ? " disperso" : "") + '">Fora da plataforma: <b>' +
                 ((e.foraMs || 0) < 60000 ? ((e.foraMs || 0) ? "menos de 1 min" : "0 min") : tempoTxt(e.foraMs / 1000)) + "</b>" +
-                (e.saidas ? " em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") : "") + "</p>") + contagem +
+                (e.saidas ? " em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") : "") +
+                ((e.foraMs || 0) >= REGRAS.limiteForaMinutos * 60000 ? " · disperso, não vai contar para a ofensiva" : "") + "</p>") + contagem +
             '<div class="pomo-acoes"><button class="btn btn-secundario" data-pomo="' + (pausado ? "retomar" : "pausar") + '">' + (pausado ? "▶ Retomar" : "⏸ Pausar") + "</button>" +
             '<button class="btn btn-secundario btn-perigo" data-pomo="cancelar">' + (pomoConfirmar ? "Confirmar: cancelar" : "Cancelar") + "</button></div>" +
             (pomoConfirmar ? '<p class="pomo-aviso">Cancelando, este pomodoro não conta para a ofensiva.</p>' : ""));
@@ -2352,7 +2360,7 @@
       (e && e.fase === "pausa" ? '<p class="aviso">Você está na pausa. Se já descansou, pode começar o próximo agora.</p>' : "") +
       botoesPomodoro() +
       '<ul class="portao-dicas"><li><b>🎧 Estudo:</b> resumo, áudio, flashcards e provas. Ficar fora da plataforma conta como tempo disperso no seu relatório' +
-      " (avisamos depois de " + REGRAS.alertaForaSegundos + " segundos fora; com " + REGRAS.limiteForaMinutos + " minutos fora o pomodoro fica marcado como disperso).</li>" +
+      " (avisamos depois de " + REGRAS.alertaForaSegundos + " segundos fora; com " + REGRAS.limiteForaMinutos + " minutos fora o pomodoro fica disperso e não conta para a ofensiva).</li>" +
       "<li><b>🛠️ Execução prática:</b> para fazer a parte prática da aula em outras ferramentas. O tempo fora não é medido.</li></ul></section>"
     );
   }
