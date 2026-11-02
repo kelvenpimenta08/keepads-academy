@@ -25,7 +25,9 @@ Aprovado na aula com nota **70 ou mais**, tendo feito as duas provas. O certific
 
 **Uma tentativa por prova:** depois de enviar, a pessoa só refaz a prova 30 dias depois, e vale a melhor nota. O banco garante essa regra com o trigger `academy_quiz_refazer`.
 
-**Ofensiva e ranking:** a ofensiva conta os dias seguidos com pelo menos 5 flashcards revisados (`ACADEMY_REGRAS.metaDiaria`, no `content/curso.js`). Cada mentoria tem um ranking pela média das provas, calculado pela função `academy_ranking` no Supabase.
+**Ofensiva e ranking:** a ofensiva conta os dias seguidos com pelo menos 1 pomodoro concluído e 5 flashcards revisados no mesmo dia (`ACADEMY_REGRAS.pomodoroMinutos` e `metaDiaria`, no `content/curso.js`). Cada mentoria tem um ranking pela média das provas, calculado pela função `academy_ranking` no Supabase.
+
+**Pomodoro:** o 🍅 no topo abre um timer de 30 minutos (pausa sugerida de 5). O timer fica no navegador com horários absolutos, então continua certo ao trocar de tela ou recarregar. Só o pomodoro concluído vai para a tabela `academy_pomodoros` (`supabase/pomodoro.sql`), e o banco confere se os 30 minutos passaram de verdade. A ofensiva do ranking e a meta do dia da temporada também exigem o pomodoro.
 
 **Temporadas (competição de 90 dias):** ficam em `TEMPORADAS`, no `content/curso.js`. Cada temporada tem a mentoria, as datas, os prêmios e se os administradores disputam. Os pontos (XP) ficam em `TEMPORADA_PONTOS` e os níveis em `TEMPORADA_NIVEIS`. O placar é calculado pela função `academy_temporada` no Supabase (`supabase/temporada.sql`). Para a próxima temporada, basta preencher os prêmios dela.
 
