@@ -87,6 +87,15 @@ input[type=text], input[type=email], input[type=password], input:not([type]) {
   border: 1px solid var(--borda); border-radius: 10px; font: 400 .95rem var(--fonte-texto); background: #fff; color: var(--texto);
 }
 input:focus { outline: 2px solid var(--verde); outline-offset: 1px; border-color: var(--verde); }
+/* Olhinho para mostrar/esconder a senha */
+.senha-campo { position: relative; display: block; }
+.senha-campo input { padding-right: 3rem; }
+.senha-olho {
+  position: absolute; right: .35rem; top: calc(50% + .15rem); transform: translateY(-50%);
+  background: none; border: 0; padding: .4rem; border-radius: 8px; line-height: 0; cursor: pointer; color: var(--muted);
+}
+.senha-olho:hover { color: var(--texto); background: var(--fundo); }
+.senha-olho:focus-visible { outline: 2px solid var(--verde); }
 input:disabled { background: #f1f4f3; color: var(--muted); }
 .aviso { background: var(--verde-claro); color: var(--verde-escuro); border-radius: 10px; padding: .75rem 1rem; font-size: .88rem; margin-bottom: 1rem; }
 
