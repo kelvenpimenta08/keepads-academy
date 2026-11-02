@@ -180,6 +180,46 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .ofensiva-semana .dia.hoje { color: var(--texto); font-weight: 700; }
 .ofensiva-semana .dia.hoje:not(.feito) i { box-shadow: inset 0 0 0 2px var(--verde); }
 .ofensiva-meta { grid-column: 1 / -1; margin: 0; font-size: .95rem; }
+.ofensiva-meta p { margin: 0; }
+.ofensiva-checklist { list-style: none; padding: 0; margin: .5rem 0 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+.ofensiva-checklist li { background: var(--fundo); border-radius: 10px; padding: .45rem .8rem; display: flex; align-items: center; gap: .4rem; }
+.ofensiva-checklist li.ok { background: var(--verde-claro); color: var(--verde-escuro); }
+.ofensiva-checklist small { color: var(--muted); }
+.link-inline { display: inline; margin: 0; padding: 0 .2rem; font-weight: 700; text-decoration: underline; }
+
+/* Pomodoro: chip no topo e painel flutuante (fica por cima de qualquer tela) */
+.pomodoro-chip {
+  background: rgba(255, 255, 255, .1); color: #fff; border: 0; border-radius: 99px; padding: .3rem .7rem;
+  font: 700 .88rem var(--fonte-texto); cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.pomodoro-chip:hover { background: rgba(255, 255, 255, .18); }
+.pomodoro-chip.ativo { background: var(--verde); color: var(--preto); }
+.pomodoro-chip.pausa { background: #f5a524; color: var(--preto); }
+.pomodoro-chip.feito { box-shadow: inset 0 0 0 1.5px var(--verde); }
+.pomo-painel {
+  position: fixed; right: 16px; top: 76px; z-index: 40; width: min(330px, calc(100% - 32px));
+  background: #fff; border-radius: 18px; box-shadow: 0 4px 10px rgba(13, 13, 13, .1), 0 18px 40px rgba(13, 13, 13, .18);
+  padding: 1.1rem 1.2rem 1.2rem; animation: pomo-entra .2s ease-out;
+}
+@keyframes pomo-entra { from { opacity: 0; transform: translateY(-6px); } }
+.pomo-cabeca { display: flex; justify-content: space-between; align-items: center; }
+.pomo-cabeca h3 { margin: 0; }
+.pomo-fechar { background: none; border: 0; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--muted); padding: 0 .2rem; }
+.pomo-texto { font-size: .92rem; margin: .6rem 0; }
+.pomo-hoje { font-size: .85rem; color: var(--muted); margin: 0 0 .8rem; }
+.pomo-acoes { display: flex; gap: .5rem; }
+.pomo-acoes .btn { flex: 1; padding: .6rem .5rem; font-size: .92rem; }
+.btn-perigo:hover { border-color: var(--erro) !important; color: var(--erro) !important; }
+.pomo-aviso { font-size: .8rem; color: var(--erro); margin: .5rem 0 0; }
+.pomo-feito { font-size: 3rem; text-align: center; line-height: 1.2; margin-top: .4rem; }
+.pomo-anel {
+  --p: 0; width: 170px; aspect-ratio: 1; margin: .8rem auto .2rem; border-radius: 50%; display: grid; place-items: center;
+  background: conic-gradient(var(--verde) calc(var(--p) * 1%), var(--cinza) 0);
+}
+.pomo-anel.pausa { background: conic-gradient(#f5a524 calc(var(--p) * 1%), var(--cinza) 0); }
+.pomo-anel > div { width: 82%; aspect-ratio: 1; border-radius: 50%; background: #fff; display: grid; place-content: center; text-align: center; }
+.pomo-anel b { font-family: var(--fonte-titulo); font-size: 2.3rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.pomo-anel span { font-family: var(--fonte-rotulo); font-size: .78rem; color: var(--muted); }
 
 /* Ranking */
 .podio { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: .8rem; align-items: end; margin: 1.2rem 0; }
@@ -358,6 +398,8 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .auth-card { padding: 2rem 16px; }
   .menu { gap: .8rem; }
   .menu a:not(.menu-perfil) { font-size: .8rem; }
+  .pomodoro-chip { font-size: .8rem; }
+  .pomo-painel { top: auto; bottom: 16px; }
   .logo-sub { display: none; }
   .hero { flex-direction: column; align-items: stretch; padding: 1.4rem; }
   .hero h1 { font-size: 1.5rem; }
