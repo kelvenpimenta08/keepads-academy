@@ -11,6 +11,16 @@ create table if not exists public.academy_pomodoros (
 );
 create index if not exists academy_pomodoros_user_idx on public.academy_pomodoros (user_id, concluido_em);
 
+-- Tipo do pomodoro e dispersão:
+--   estudo   = dentro da plataforma (resumo, áudio, flashcards, provas); o tempo fora da aba conta como disperso;
+--   execucao = executando a parte prática em outras ferramentas; o tempo fora não é medido.
+-- fora_segundos e saidas são medidos pelo navegador durante o pomodoro de estudo.
+alter table public.academy_pomodoros add column if not exists tipo text not null default 'estudo';
+alter table public.academy_pomodoros add column if not exists fora_segundos int not null default 0;
+alter table public.academy_pomodoros add column if not exists saidas int not null default 0;
+alter table public.academy_pomodoros drop constraint if exists academy_pomodoros_tipo_chk;
+alter table public.academy_pomodoros add constraint academy_pomodoros_tipo_chk check (tipo in ('estudo', 'execucao'));
+
 -- O horário de conclusão é sempre o do servidor, e o pomodoro só vale se os minutos
 -- realmente passaram desde o início (com 1 minuto de tolerância).
 create or replace function public.academy_validar_pomodoro()
@@ -25,6 +35,12 @@ begin
   if new.iniciado_em < now() - interval '1 day' then
     raise exception 'Pomodoro antigo demais para ser registrado.';
   end if;
+  -- Tempo fora nunca passa da duração do pomodoro; no de execução ele não é medido
+  if new.tipo = 'execucao' then
+    new.fora_segundos := 0; new.saidas := 0;
+  end if;
+  new.fora_segundos := least(greatest(coalesce(new.fora_segundos, 0), 0), new.minutos * 60);
+  new.saidas := least(greatest(coalesce(new.saidas, 0), 0), 500);
   return new;
 end;
 $$;
