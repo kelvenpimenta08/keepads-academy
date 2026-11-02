@@ -434,6 +434,24 @@
       "</div></div>";
   }
 
+  // Olhinho nos campos de senha: clica e mostra o que foi digitado, clica de novo e esconde
+  const ICONE_OLHO = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const ICONE_OLHO_FECHADO = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7c2 0 3.8.7 5.2 1.6M22 12s-3.6 7-10 7c-2 0-3.8-.7-5.2-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>';
+  const OLHO = '<button type="button" class="senha-olho" data-olho aria-label="Mostrar senha" title="Mostrar senha">' + ICONE_OLHO + "</button>";
+
+  document.addEventListener("click", function (ev) {
+    const b = ev.target.closest("[data-olho]");
+    if (!b) return;
+    ev.preventDefault();
+    const input = b.parentElement.querySelector("input");
+    const mostrar = input.type === "password";
+    input.type = mostrar ? "text" : "password";
+    b.innerHTML = mostrar ? ICONE_OLHO_FECHADO : ICONE_OLHO;
+    b.setAttribute("aria-label", mostrar ? "Esconder senha" : "Mostrar senha");
+    b.title = mostrar ? "Esconder senha" : "Mostrar senha";
+    input.focus();
+  });
+
   function telaLogin(modo, aviso) {
     modo = modo || "entrar";
     const abas =
@@ -446,7 +464,7 @@
       form =
         '<label>Nome completo<input name="nome" required autocomplete="name" placeholder="Como vai sair no certificado"></label>' +
         '<label>E-mail<input name="email" type="email" required autocomplete="email"></label>' +
-        '<label>Senha<input name="senha" type="password" required minlength="6" autocomplete="new-password" placeholder="Mínimo de 6 caracteres"></label>' +
+        '<label>Senha<span class="senha-campo"><input name="senha" type="password" required minlength="6" autocomplete="new-password" placeholder="Mínimo de 6 caracteres">' + OLHO + '</span></label>' +
         '<label>Código de convite<input name="convite" required autocomplete="off" autocapitalize="characters" placeholder="Enviado pela liderança no grupo"></label>' +
         '<button class="btn btn-primario btn-largo" type="submit">Criar conta</button>';
     } else if (modo === "esqueci") {
@@ -458,7 +476,7 @@
     } else {
       form =
         '<label>E-mail<input name="email" type="email" required autocomplete="email"></label>' +
-        '<label>Senha<input name="senha" type="password" required autocomplete="current-password"></label>' +
+        '<label>Senha<span class="senha-campo"><input name="senha" type="password" required autocomplete="current-password">' + OLHO + '</span></label>' +
         '<button class="btn btn-primario btn-largo" type="submit">Entrar</button>' +
         '<button type="button" class="link" data-modo="esqueci">Esqueci minha senha</button>';
     }
@@ -517,7 +535,7 @@
     app.innerHTML =
       '<div class="auth"><section class="auth-card">' +
       '<div class="auth-marca">' + marca("claro") + "</div><h2>Crie sua senha nova</h2>" +
-      '<form id="form-senha"><label>Nova senha<input name="senha" type="password" minlength="6" required autocomplete="new-password"></label>' +
+      '<form id="form-senha"><label>Nova senha<span class="senha-campo"><input name="senha" type="password" minlength="6" required autocomplete="new-password">' + OLHO + '</span></label>' +
       '<button class="btn btn-primario btn-largo" type="submit">Salvar senha</button><div class="erro" id="erro-senha"></div></form>' +
       "</section></div>";
     document.getElementById("form-senha").addEventListener("submit", async function (ev) {
