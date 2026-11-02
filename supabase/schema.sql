@@ -213,6 +213,8 @@ grant execute on function public.academy_ranking(text, int, int) to authenticate
 -- A primeira pessoa que entrar no Academy vira administradora. Para promover outra depois:
 -- update public.academy_profiles set is_admin = true where email = 'email-da-pessoa@exemplo.com';
 
+-- Segurança da competição e convite do cadastro: ver supabase/seguranca.sql
+--   Ordem para rodar tudo: schema.sql, seguranca.sql, pomodoro.sql, temporada.sql, relatorio.sql, travas.sql
 -- Pomodoro (exigido na ofensiva do dia): ver supabase/pomodoro.sql (rodar antes do temporada.sql)
 -- Relatório de estudo e ranking de foco: ver supabase/relatorio.sql
 -- Feedback para quem travou: ver supabase/travas.sql

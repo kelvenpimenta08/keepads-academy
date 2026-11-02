@@ -59,7 +59,9 @@ create policy "academy pomodoros: inserir" on public.academy_pomodoros for inser
   with check (user_id = auth.uid());
 revoke all on public.academy_pomodoros from anon;
 revoke update, delete on public.academy_pomodoros from authenticated;
-grant select, insert on public.academy_pomodoros to authenticated;
+-- Inserir só pela função academy_concluir_pomodoro (supabase/seguranca.sql), que confere o início no servidor
+revoke insert on public.academy_pomodoros from authenticated;
+grant select on public.academy_pomodoros to authenticated;
 
 -- Ranking: a ofensiva agora exige, no mesmo dia, p_meta flashcards E pelo menos 1 pomodoro sem dispersão.
 create or replace function public.academy_ranking(p_curso text, p_versao int, p_meta int)
@@ -111,6 +113,7 @@ as $$
   join public.academy_profiles p on p.id = pa.user_id
   left join provas pr on pr.user_id = p.id
   left join atual a on a.user_id = p.id
+  where public.academy_membro()   -- só quem é da equipe vê o ranking (supabase/seguranca.sql)
   group by p.id, p.nome;
 $$;
 

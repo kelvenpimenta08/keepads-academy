@@ -66,7 +66,8 @@ as $$
   from public.academy_profiles pr
   left join pom_soma ps on ps.user_id = pr.id
   left join rev_soma rs on rs.user_id = pr.id
-  left join dias d on d.user_id = pr.id;
+  left join dias d on d.user_id = pr.id
+  where public.academy_membro();   -- só quem é da equipe vê (supabase/seguranca.sql)
 $$;
 
 revoke execute on function public.academy_foco(timestamptz, timestamptz, int) from public, anon;

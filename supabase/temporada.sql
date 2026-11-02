@@ -101,6 +101,8 @@ as $$
     from public.academy_practice_checks p cross join cfg
     where p.curso = p_curso and p.done and length(trim(coalesce(p.relato, ''))) > 0
       and (p.done_at at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      -- só partes que existem na aula (a1-p1 ... a1-pN, com N vindo de p_praticas)
+      and substring(p.task_id from '-p([0-9]+)$')::int <= coalesce((p_praticas ->> p.aula::text)::int, 0)
   ),
   -- Provas: melhor nota de cada prova feita na temporada (versão atual)
   provas_temp as (
@@ -126,7 +128,9 @@ as $$
   ),
   feitas as (
     select p.user_id, p.aula, count(*) as n
-    from public.academy_practice_checks p where p.curso = p_curso and p.done group by 1, 2
+    from public.academy_practice_checks p where p.curso = p_curso and p.done
+      and substring(p.task_id from '-p([0-9]+)$')::int <= coalesce((p_praticas ->> p.aula::text)::int, 0)
+    group by 1, 2
   ),
   aprovadas as (
     select m.user_id, m.aula, m.quando
@@ -188,7 +192,8 @@ as $$
   left join soma s on s.user_id = pr.id
   left join revs r on r.user_id = pr.id
   left join ofensiva_max o on o.user_id = pr.id
-  left join provas_resumo pv on pv.user_id = pr.id;
+  left join provas_resumo pv on pv.user_id = pr.id
+  where public.academy_membro();   -- só quem é da equipe vê o placar (supabase/seguranca.sql)
 $$;
 
 revoke execute on function public.academy_temporada(text, date, date, int, jsonb, jsonb) from public, anon;
