@@ -215,4 +215,5 @@ grant execute on function public.academy_ranking(text, int, int) to authenticate
 
 -- Pomodoro (exigido na ofensiva do dia): ver supabase/pomodoro.sql (rodar antes do temporada.sql)
 -- Relatório de estudo e ranking de foco: ver supabase/relatorio.sql
+-- Feedback para quem travou: ver supabase/travas.sql
 -- Temporadas (competição de 90 dias): ver supabase/temporada.sql
