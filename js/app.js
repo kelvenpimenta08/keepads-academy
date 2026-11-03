@@ -145,14 +145,29 @@
     S.perfil = r.data || { id: u.id, nome: "", is_admin: false };
   }
 
+  // O Supabase devolve no máximo 1.000 linhas por consulta: busca em páginas até vir tudo
+  // (o histórico de revisões de uma pessoa passa disso em poucas semanas, e o da equipe ainda antes)
+  async function todas(montar) {
+    const passo = 1000;
+    let de = 0, tudo = [];
+    for (;;) {
+      const q = montar();
+      const r = q.range ? await q.range(de, de + passo - 1) : await q;
+      if (r.error) return r;
+      tudo = tudo.concat(r.data || []);
+      if (!q.range || !r.data || r.data.length < passo) return { data: tudo, error: null };
+      de += passo;
+    }
+  }
+
   async function carregarDados() {
     const uid = S.session.user.id;
     const res = await Promise.all([
-      sb.from(T.cards).select("*").eq("user_id", uid),
-      sb.from(T.praticas).select("*").eq("user_id", uid),
-      sb.from(T.provas).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }),
-      sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid),
-      sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em,tipo,fora_segundos,saidas").eq("user_id", uid),
+      todas(function () { return sb.from(T.cards).select("*").eq("user_id", uid).order("card_id"); }),
+      todas(function () { return sb.from(T.praticas).select("*").eq("user_id", uid).order("task_id"); }),
+      todas(function () { return sb.from(T.provas).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }); }),
+      todas(function () { return sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid).order("id"); }),
+      todas(function () { return sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em,tipo,fora_segundos,saidas").eq("user_id", uid).order("id"); }),
       sb.from(T.travas).select("*").eq("user_id", uid).order("created_at", { ascending: false })
     ]);
     res.forEach(function (r) { if (r.error) throw r.error; });
@@ -219,13 +234,18 @@
   }
 
   function calcularOfensiva() {
+    return ofensivaDe((S.bruto && S.bruto.log) || [], (S.bruto && S.bruto.pomodoros) || []);
+  }
+
+  // Mesma conta para qualquer pessoa (a tela Equipe usa para mostrar a ofensiva de cada um)
+  function ofensivaDe(log, pomodoros) {
     const porDia = {}, focoPorDia = {};
-    ((S.bruto && S.bruto.log) || []).forEach(function (l) {
+    log.forEach(function (l) {
       const d = diaLocal(l.reviewed_at);
       porDia[d] = (porDia[d] || 0) + 1;
     });
     // Pomodoro disperso (muito tempo fora da plataforma) não conta para a ofensiva
-    ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) { return !pomodoroDisperso(p); }).forEach(function (p) {
+    pomodoros.filter(function (p) { return !pomodoroDisperso(p); }).forEach(function (p) {
       const d = diaLocal(p.concluido_em);
       focoPorDia[d] = (focoPorDia[d] || 0) + 1;
     });
@@ -1859,45 +1879,64 @@
     layout('<div class="painel centro"><p>Carregando a equipe…</p></div>');
     const tela = location.hash;
     const res = await Promise.all([
-      sb.from(T.perfis).select("id,nome,email,created_at").order("nome"),
-      sb.from(T.cards).select("user_id,card_id,aula,interval_days,due").eq("curso", CURSO.id),
-      sb.from(T.praticas).select("user_id,aula,task_id,done").eq("curso", CURSO.id),
-      sb.from(T.provas).select("user_id,aula,tipo,nota,created_at,versao:respostas->_versao").eq("curso", CURSO.id),
-      sb.from(T.travas).select("*").order("created_at", { ascending: false })
+      todas(function () { return sb.from(T.perfis).select("id,nome,email,created_at").order("nome"); }),
+      todas(function () { return sb.from(T.cards).select("user_id,card_id,aula,interval_days,due").eq("curso", CURSO.id).order("user_id").order("card_id"); }),
+      todas(function () { return sb.from(T.praticas).select("user_id,aula,task_id,done").eq("curso", CURSO.id).order("user_id").order("task_id"); }),
+      todas(function () { return sb.from(T.provas).select("user_id,aula,tipo,nota,created_at,versao:respostas->_versao").eq("curso", CURSO.id).order("id"); }),
+      todas(function () { return sb.from(T.travas).select("*").order("created_at", { ascending: false }); }),
+      // Para a ofensiva, os pomodoros e a última atividade de cada pessoa (todas as mentorias)
+      todas(function () { return sb.from(T.log).select("user_id,curso,aula,reviewed_at").order("id"); }),
+      todas(function () { return sb.from(T.pomodoros).select("user_id,concluido_em,tipo,fora_segundos,minutos").order("id"); })
     ]);
     if (location.hash !== tela) return;   // a pessoa já foi para outra tela
     const falhou = res.find(function (r) { return r.error; });
     if (falhou) { layout('<div class="painel"><p class="erro">' + esc(traduzErro(falhou.error)) + "</p></div>"); return; }
 
     const disponiveis = CURSO.aulas.filter(function (a) { return a.disponivel && AULAS[a.numero]; });
+    const seteDias = Date.now() - 7 * DIA;
     const linhas = res[0].data.map(function (p) {
-      const dados = montarDados(
-        res[1].data.filter(function (x) { return x.user_id === p.id; }),
-        res[2].data.filter(function (x) { return x.user_id === p.id; }),
-        res[3].data.filter(function (x) { return x.user_id === p.id; })
-      );
+      const meu = function (x) { return x.user_id === p.id; };
+      const dados = montarDados(res[1].data.filter(meu), res[2].data.filter(meu), res[3].data.filter(meu));
+      const log = res[5].data.filter(meu), poms = res[6].data.filter(meu);
       const resumos = disponiveis.map(function (a) { return resumoAula(a.numero, dados); });
       const aprovadas = resumos.filter(function (r) { return r.aprovado; }).length;
-      const ultima = dados.provas.concat([]).map(function (x) { return new Date(x.created_at); });
-      return { p: p, resumos: resumos, aprovadas: aprovadas, ultima: ultima.length ? new Date(Math.max.apply(null, ultima)) : null };
-    }).sort(function (a, b) { return b.aprovadas - a.aprovadas || (b.resumos[0] ? b.resumos[0].nota : 0) - (a.resumos[0] ? a.resumos[0].nota : 0); });
+      const datas = [].concat(log.map(function (x) { return x.reviewed_at; }), poms.map(function (x) { return x.concluido_em; }),
+        dados.provas.map(function (x) { return x.created_at; })).map(function (d) { return Date.parse(d); }).filter(function (t) { return !isNaN(t); });
+      return {
+        p: p, resumos: resumos, aprovadas: aprovadas, ofensiva: ofensivaDe(log, poms).dias,
+        pomodoros7: poms.filter(function (x) { return Date.parse(x.concluido_em) >= seteDias; }).length,
+        revisoes7: log.filter(function (x) { return Date.parse(x.reviewed_at) >= seteDias; }).length,
+        ultima: datas.length ? new Date(Math.max.apply(null, datas)) : null
+      };
+    }).sort(function (a, b) { return b.aprovadas - a.aprovadas || b.ofensiva - a.ofensiva || (b.ultima || 0) - (a.ultima || 0); });
 
+    const quando = function (d) {
+      if (!d) return "nunca estudou";
+      const dias = diasDesde(d.getTime());
+      return dias === 0 ? "hoje" : dias === 1 ? "ontem" : "há " + dias + " dias";
+    };
     const cab = disponiveis.map(function (a) { return "<th>Aula " + dois(a.numero) + "</th>"; }).join("");
     const corpo = linhas.map(function (l) {
       return "<tr><td><b>" + esc(l.p.nome || "(sem nome)") + '</b><div class="muted pequeno">' + esc(l.p.email || "") + "</div></td>" +
+        "<td><b>🔥 " + l.ofensiva + "</b></td>" +
+        "<td><b>🍅 " + l.pomodoros7 + '</b><div class="muted pequeno">' + l.revisoes7 + " cards revisados</div></td>" +
+        "<td>" + quando(l.ultima) + "</td>" +
         l.resumos.map(function (r) {
-          return "<td><b>" + r.nota + "</b> " + chipStatus(r) + '<div class="muted pequeno">' + r.dominados + "/" + r.totalCards + " cards · " + r.feitas + "/" + r.totalTarefas + " práticas</div></td>";
+          return "<td><b>" + r.nota + "</b> " + chipStatus(r) + '<div class="muted pequeno">' + (r.totalCards - r.novos) + "/" + r.totalCards + " cards vistos · " +
+            r.dominados + " dominados<br>" + r.feitas + "/" + r.totalTarefas + " práticas</div></td>";
         }).join("") +
-        "<td><b>" + l.aprovadas + "/" + CURSO.aulas.length + "</b></td>" +
-        "<td>" + (l.ultima ? dataBR(l.ultima) : "—") + "</td></tr>";
+        "<td><b>" + l.aprovadas + "/" + disponiveis.length + "</b></td></tr>";
     }).join("");
 
     layout(
       '<a href="' + rota("") + '" class="voltar">← Voltar para as aulas</a>' +
       "<h1>Equipe</h1><p class=\"muted\">" + esc(CURSO.tipo + " " + CURSO.titulo + " · " + CURSO.mentor) +
-      ". Progresso de todo mundo que criou conta: " + linhas.length + " pessoa(s).</p>" +
+      ". Todo mundo que criou conta: " + linhas.length + " pessoa(s).</p>" +
       (disponiveis.length ? "" : '<p class="aviso">Esta mentoria ainda não tem aulas liberadas.</p>') +
-      '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th>' + cab + "<th>Aprovadas</th><th>Última prova</th></tr></thead><tbody>" + corpo + "</tbody></table></div>" +
+      '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th><th>Ofensiva</th><th>Últimos 7 dias</th><th>Última atividade</th>' + cab +
+      "<th>Aprovadas</th></tr></thead><tbody>" + corpo + "</tbody></table></div>" +
+      '<p class="muted pequeno">Cards vistos = já revisados pelo menos uma vez. Dominados = com memória de 7 dias ou mais (só aparecem depois de uma semana de revisões). ' +
+      "Ofensiva, pomodoros e última atividade contam todas as mentorias. O placar da Temporada só soma XP a partir do primeiro dia dela.</p>" +
       painelTravas(res[4].data, res[0].data)
     );
   }
