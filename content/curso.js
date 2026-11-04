@@ -81,7 +81,7 @@
       curso: "adriano-ia-trafego",
       inicio: "2026-11-04",   // começa na quarta, depois da apresentação da plataforma para a equipe
       fim: "2027-02-01",      // 90 dias contando o primeiro
-      adminsConcorrem: false,
+      adminsConcorrem: true,  // o Kelven também disputa
       premios: [
         { id: "campeao", titulo: "Campeão da temporada", icone: "🥇", valor: 550, regra: "1º lugar no placar dos 90 dias",
           opcoes: ["Air fryer grande (5 a 6 L)", "Cafeteira espresso ou de cápsula com espumador", "Caixa de som JBL ou smartwatch"] },
