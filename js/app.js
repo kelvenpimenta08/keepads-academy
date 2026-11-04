@@ -167,7 +167,7 @@
       todas(function () { return sb.from(T.praticas).select("*").eq("user_id", uid).order("task_id"); }),
       todas(function () { return sb.from(T.provas).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }); }),
       todas(function () { return sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid).order("id"); }),
-      todas(function () { return sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em,tipo,fora_segundos,saidas").eq("user_id", uid).order("id"); }),
+      todas(function () { return sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em,tipo,fora_segundos,saidas,rotulo").eq("user_id", uid).order("id"); }),
       sb.from(T.travas).select("*").eq("user_id", uid).order("created_at", { ascending: false })
     ]);
     res.forEach(function (r) { if (r.error) throw r.error; });
@@ -229,6 +229,9 @@
   // ---------- ofensiva (estilo Duolingo) ----------
   // Um dia conta quando a pessoa faz pelo menos 1 pomodoro E revisa pelo menos REGRAS.metaDiaria
   // flashcards, de qualquer aula ou curso. O ranking e a temporada usam a mesma regra no banco.
+  // Pomodoro do campeonato (estudo ou execução). O de foco livre não conta para ofensiva nem placar.
+  function ehCampeonato(tipo) { return !tipo || tipo === "estudo" || tipo === "execucao"; }
+
   function pomodoroDisperso(p) {
     return (p.tipo || "estudo") === "estudo" && (p.fora_segundos || 0) >= REGRAS.limiteForaMinutos * 60;
   }
@@ -243,7 +246,7 @@
     // Só conta o que foi feito depois do início da competição
     const inicio = REGRAS.inicioContagem ? Date.parse(REGRAS.inicioContagem) : 0;
     log = log.filter(function (l) { return Date.parse(l.reviewed_at) >= inicio; });
-    pomodoros = pomodoros.filter(function (p) { return Date.parse(p.concluido_em) >= inicio; });
+    pomodoros = pomodoros.filter(function (p) { return Date.parse(p.concluido_em) >= inicio && ehCampeonato(p.tipo); });
     log.forEach(function (l) {
       const d = diaLocal(l.reviewed_at);
       porDia[d] = (porDia[d] || 0) + 1;
@@ -1460,7 +1463,11 @@
       "<ul><li>Clique no <b>🍅</b> do topo e em <b>Começar</b>. O tempo continua contando se você trocar de tela ou recarregar a página.</li>" +
       "<li>Antes de começar: celular longe, uma aba aberta e um objetivo claro (ex.: \"revisar os cards da Aula 3\" ou \"executar a parte prática 2\").</li>" +
       "<li>Pode pausar se for interrompido. Se cancelar, ele não conta. Só o pomodoro que chega até o fim é registrado.</li>" +
-      "<li>Pode fazer quantos quiser por dia, mas para a ofensiva basta 1.</li></ul></section>" +
+      "<li>Pode fazer quantos quiser por dia, mas para a ofensiva basta 1.</li></ul>" +
+      "<h3>🎯 Foco livre</h3>" +
+      "<p>No mesmo 🍅 tem o <b>foco livre</b>, para usar o pomodoro no resto do dia: <b>📖 Leitura</b>, <b>🎬 Videoaula / curso</b>, <b>💼 Trabalho</b> ou <b>✏️ Outro</b> (você dá o nome). " +
+      "Escolha 25, 30, 45 ou 50 minutos.</p>" +
+      "<p>O foco livre <b>não abre as aulas, não conta para a ofensiva e não dá XP</b>: ele serve para você ganhar foco e ver no <b>Relatório</b> quantos pomodoros fez de cada tipo na semana e no mês.</p></section>" +
       '<section class="guia-bloco"><h2>📊 Relatório de estudo</h2>' +
       "<p>Em <b>Relatório</b> (no menu) você vê quantas horas estudou, quantos pomodoros fez e quantos flashcards revisou nos últimos <b>7 ou 30 dias</b>, dia a dia, comparado ao período anterior. Tem um botão para copiar o resumo e mandar no WhatsApp.</p>" +
       "<p><b>Horas de estudo</b> = os minutos dos pomodoros concluídos + o tempo nos flashcards fora de um pomodoro (sem contar duas vezes). O tempo nos cards é estimado pelo intervalo entre um card e o próximo.</p>" +
@@ -1932,7 +1939,8 @@
         dados.provas.map(function (x) { return x.created_at; })).map(function (d) { return Date.parse(d); }).filter(function (t) { return !isNaN(t); });
       return {
         p: p, resumos: resumos, aprovadas: aprovadas, ofensiva: ofensivaDe(log, poms).dias,
-        pomodoros7: poms.filter(function (x) { return Date.parse(x.concluido_em) >= seteDias; }).length,
+        pomodoros7: poms.filter(function (x) { return Date.parse(x.concluido_em) >= seteDias && ehCampeonato(x.tipo); }).length,
+        livres7: poms.filter(function (x) { return Date.parse(x.concluido_em) >= seteDias && !ehCampeonato(x.tipo); }).length,
         revisoes7: log.filter(function (x) { return Date.parse(x.reviewed_at) >= seteDias; }).length,
         ultima: datas.length ? new Date(Math.max.apply(null, datas)) : null
       };
@@ -1948,6 +1956,7 @@
       return "<tr><td><b>" + esc(l.p.nome || "(sem nome)") + '</b><div class="muted pequeno">' + esc(l.p.email || "") + "</div></td>" +
         "<td><b>🔥 " + l.ofensiva + "</b></td>" +
         "<td><b>🍅 " + l.pomodoros7 + '</b><div class="muted pequeno">' + l.revisoes7 + " cards revisados</div></td>" +
+        "<td><b>🎯 " + l.livres7 + "</b></td>" +
         "<td>" + quando(l.ultima) + "</td>" +
         l.resumos.map(function (r) {
           return "<td><b>" + r.nota + "</b> " + chipStatus(r) + '<div class="muted pequeno">' + (r.totalCards - r.novos) + "/" + r.totalCards + " cards vistos · " +
@@ -1961,10 +1970,11 @@
       "<h1>Equipe</h1><p class=\"muted\">" + esc(CURSO.tipo + " " + CURSO.titulo + " · " + CURSO.mentor) +
       ". Todo mundo que criou conta: " + linhas.length + " pessoa(s).</p>" +
       (disponiveis.length ? "" : '<p class="aviso">Esta mentoria ainda não tem aulas liberadas.</p>') +
-      '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th><th>Ofensiva</th><th>Últimos 7 dias</th><th>Última atividade</th>' + cab +
+      '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th><th>Ofensiva</th><th>Últimos 7 dias</th><th>Foco livre (7 dias)</th><th>Última atividade</th>' + cab +
       "<th>Aprovadas</th></tr></thead><tbody>" + corpo + "</tbody></table></div>" +
       '<p class="muted pequeno">Cards vistos = já revisados pelo menos uma vez. Dominados = com memória de 7 dias ou mais (só aparecem depois de uma semana de revisões). ' +
-      "Ofensiva, pomodoros e última atividade contam todas as mentorias. O placar da Temporada só soma XP a partir do primeiro dia dela.</p>" +
+      "Ofensiva, pomodoros e última atividade contam todas as mentorias. Foco livre = pomodoros de leitura, videoaula, trabalho e outros, que não contam para o campeonato. " +
+      "O placar da Temporada só soma XP a partir do primeiro dia dela.</p>" +
       painelTravas(res[4].data, res[0].data)
     );
   }
@@ -2284,13 +2294,26 @@
 
   function estudoNoPeriodo(ini, fim) {
     const dentro = function (t) { return t >= ini.getTime() && t < fim.getTime(); };
-    const poms = ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) { return dentro(Date.parse(p.concluido_em)); });
-    const todos = ((S.bruto && S.bruto.pomodoros) || []).map(function (p) { return [Date.parse(p.iniciado_em), Date.parse(p.concluido_em)]; });
+    const todosPoms = ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) { return dentro(Date.parse(p.concluido_em)); });
+    // Horas de estudo e dispersão: só pomodoros do campeonato. O foco livre aparece à parte.
+    const poms = todosPoms.filter(function (p) { return ehCampeonato(p.tipo); });
+    const livres = todosPoms.filter(function (p) { return !ehCampeonato(p.tipo); });
+    const todos = ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) { return ehCampeonato(p.tipo); })
+      .map(function (p) { return [Date.parse(p.iniciado_em), Date.parse(p.concluido_em)]; });
     const revs = ((S.bruto && S.bruto.log) || []).map(function (l) { return Date.parse(l.reviewed_at); }).filter(dentro).sort(function (a, b) { return a - b; });
     const porDia = {};
-    const dia = function (t) { const k = diaLocal(new Date(t)); return porDia[k] || (porDia[k] = { foco: 0, extra: 0, cards: 0, pomodoros: 0 }); };
+    const dia = function (t) { const k = diaLocal(new Date(t)); return porDia[k] || (porDia[k] = { foco: 0, extra: 0, cards: 0, pomodoros: 0, livre: 0, livres: 0 }); };
     let minFoco = 0, segCards = 0, segExtra = 0;
     poms.forEach(function (p) { const d = dia(Date.parse(p.concluido_em)); d.foco += p.minutos; d.pomodoros++; minFoco += p.minutos; });
+    // Pomodoros por tipo (campeonato e foco livre), para a seção "Seus pomodoros"
+    const porTipo = {};
+    todosPoms.forEach(function (p) {
+      const k = p.tipo || "estudo";
+      const x = porTipo[k] || (porTipo[k] = { n: 0, min: 0 });
+      x.n++; x.min += p.minutos;
+      if (!ehCampeonato(p.tipo)) { const d = dia(Date.parse(p.concluido_em)); d.livre += p.minutos; d.livres++; }
+    });
+    const minLivre = livres.reduce(function (s, p) { return s + p.minutos; }, 0);
     revs.forEach(function (t, i) {
       const gap = i ? t - revs[i - 1] : Infinity;
       const s = (gap <= PAUSA_SESSAO ? gap : CARD_SOLTO) / 1000;
@@ -2310,7 +2333,9 @@
       pomEstudo: estudo.length, pomExecucao: poms.length - estudo.length, foraSeg: foraSeg,
       saidas: estudo.reduce(function (s, p) { return s + (p.saidas || 0); }, 0),
       dispersos: estudo.filter(function (p) { return (p.fora_segundos || 0) >= REGRAS.limiteForaMinutos * 60; }).length,
-      indiceFoco: minEstudo ? Math.max(0, Math.round((1 - foraSeg / (minEstudo * 60)) * 100)) : null
+      indiceFoco: minEstudo ? Math.max(0, Math.round((1 - foraSeg / (minEstudo * 60)) * 100)) : null,
+      porTipo: porTipo, livres: livres.length, minLivre: minLivre,
+      pomodorosTodos: todosPoms.length, minTodos: minFoco + minLivre
     };
   }
 
@@ -2371,6 +2396,8 @@
       '<span class="semana-ver">Ver relatório →</span></a>';
   }
 
+  function periodoTexto(dias) { return dias === 7 ? "nos últimos 7 dias" : "nos últimos 30 dias"; }
+
   function variacao(agora, antes) {
     if (!antes && !agora) return "";
     if (!antes) return '<span class="var sobe">novo</span>';
@@ -2389,16 +2416,36 @@
     // Gráfico por dia: minutos de foco (pomodoro) + minutos nos cards fora do pomodoro
     const colunas = [];
     for (let i = 0; i < dias; i++) colunas.push(somarDias(ini, i));
-    const maxMin = Math.max(30, Math.max.apply(null, colunas.map(function (d) { const x = e.porDia[diaLocal(d)]; return x ? x.foco + x.extra / 60 : 0; })));
+    const maxMin = Math.max(30, Math.max.apply(null, colunas.map(function (d) { const x = e.porDia[diaLocal(d)]; return x ? x.foco + x.extra / 60 + x.livre : 0; })));
     const semanaCurta = ["D", "S", "T", "Q", "Q", "S", "S"];
     const grafico = colunas.map(function (d, i) {
-      const x = e.porDia[diaLocal(d)] || { foco: 0, extra: 0, cards: 0, pomodoros: 0 };
-      const hf = x.foco / maxMin * 100, he = x.extra / 60 / maxMin * 100;
+      const x = e.porDia[diaLocal(d)] || { foco: 0, extra: 0, cards: 0, pomodoros: 0, livre: 0, livres: 0 };
+      const hf = x.foco / maxMin * 100, he = x.extra / 60 / maxMin * 100, hl = x.livre / maxMin * 100;
       const rotulo = dias === 7 ? semanaCurta[d.getDay()] : (i % 5 === 0 || i === dias - 1 ? d.getDate() : "");
-      return '<div class="graf-dia" title="' + dataBR(d) + ": " + x.pomodoros + " pomodoro(s), " + tempoTxt(x.foco * 60 + x.extra) + " de estudo, " + x.cards + ' cards">' +
-        '<div class="graf-barra"><span class="graf-cards" style="height:' + he + '%"></span><span class="graf-foco" style="height:' + hf + '%"></span></div>' +
+      return '<div class="graf-dia" title="' + dataBR(d) + ": " + x.pomodoros + " pomodoro(s) do campeonato, " + tempoTxt(x.foco * 60 + x.extra) + " de estudo, " + x.cards + " cards" +
+        (x.livres ? ", " + x.livres + " de foco livre (" + tempoTxt(x.livre * 60) + ")" : "") + '">' +
+        '<div class="graf-barra"><span class="graf-livre" style="height:' + hl + '%"></span><span class="graf-cards" style="height:' + he + '%"></span><span class="graf-foco" style="height:' + hf + '%"></span></div>' +
         "<small>" + rotulo + "</small></div>";
     }).join("");
+
+    // Seus pomodoros: quantos de cada tipo no período (campeonato e foco livre)
+    const ordemTipos = ["estudo", "execucao", "leitura", "video", "trabalho", "outro"];
+    const linhasTipo = ordemTipos.filter(function (k) { return e.porTipo[k] || a.porTipo[k]; }).map(function (k) {
+      const x = e.porTipo[k] || { n: 0, min: 0 }, y = a.porTipo[k] || { n: 0 };
+      return "<tr><td>" + TIPOS_POMO[k].icone + " " + TIPOS_POMO[k].nome + (TIPOS_POMO[k].campeonato ? ' <span class="chip chip-ok">campeonato</span>' : ' <span class="chip chip-cinza">foco livre</span>') +
+        "</td><td><b>" + x.n + "</b> " + variacao(x.n, y.n) + "</td><td>" + tempoTxt(x.min * 60) + "</td></tr>";
+    }).join("");
+    const resumoTipos = ordemTipos.filter(function (k) { return e.porTipo[k]; }).map(function (k) {
+      return e.porTipo[k].n + " de " + TIPOS_POMO[k].nome.toLowerCase();
+    }).join(" · ");
+    const blocoPomodoros = '<section class="painel"><h2>🍅 Seus pomodoros</h2>' +
+      (e.pomodorosTodos
+        ? '<p class="relatorio-pomos"><b>' + e.pomodorosTodos + " pomodoro" + (e.pomodorosTodos === 1 ? "" : "s") + "</b> " + periodoTexto(dias) + ", <b>" + tempoTxt(e.minTodos * 60) + " de foco</b> no total " +
+          variacao(e.pomodorosTodos, a.pomodorosTodos) + "</p>" +
+          '<div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr><th>Tipo</th><th>Pomodoros</th><th>Tempo</th></tr></thead><tbody>' + linhasTipo + "</tbody></table></div>" +
+          '<p class="muted pequeno">Os de foco livre (leitura, videoaula, trabalho) são só seus: não contam para a ofensiva nem para o campeonato. Comece um pelo 🍅 no topo.</p>'
+        : '<p class="muted">Nenhum pomodoro ' + periodoTexto(dias) + '. Toque no 🍅 no topo: tem o do campeonato e o de foco livre (leitura, videoaula, trabalho).</p>') +
+      "</section>";
 
     const periodo = dias === 7 ? "nos últimos 7 dias" : "nos últimos 30 dias";
     const textoResumo = "📊 Meu relatório Keep Ads Academy (" + periodo + ")\n" +
@@ -2407,6 +2454,7 @@
       "🧠 " + e.cards + " flashcards revisados\n" +
       "📅 " + e.dias + " de " + dias + " dias estudando\n" +
       (e.indiceFoco !== null ? "🎯 Índice de foco: " + e.indiceFoco + "% (" + tempoFora(e.foraSeg) + " fora da plataforma)\n" : "") +
+      (e.pomodorosTodos ? "🍅 Pomodoros: " + resumoTipos + " (" + tempoTxt(e.minTodos * 60) + " de foco no total)\n" : "") +
       "🔥 Ofensiva atual: " + calcularOfensiva().dias + " dia(s)";
 
     const frase = !e.segTotal
@@ -2428,7 +2476,7 @@
       '<div class="relatorio-grade">' +
       '<section class="painel"><h2>Estudo por dia</h2>' +
       '<div class="graf' + (dias === 30 ? " graf-30" : "") + '">' + grafico + "</div>" +
-      '<p class="graf-legenda"><span><i class="graf-foco"></i>Foco no pomodoro</span><span><i class="graf-cards"></i>Cards fora do pomodoro</span></p>' +
+      '<p class="graf-legenda"><span><i class="graf-foco"></i>Pomodoro do campeonato</span><span><i class="graf-cards"></i>Cards fora do pomodoro</span><span><i class="graf-livre"></i>Foco livre</span></p>' +
       '<ul class="relatorio-detalhe">' +
       "<li><span>Tempo de foco (pomodoros)</span><b>" + tempoTxt(e.minFoco * 60) + "</b></li>" +
       "<li><span>Tempo nos flashcards</span><b>" + tempoTxt(e.segCards) + "</b></li>" +
@@ -2443,6 +2491,7 @@
       '<section class="painel"><h2>Compartilhar</h2><p class="muted pequeno">Seu resumo pronto para mandar no grupo ou para o seu líder.</p>' +
       '<pre class="relatorio-texto" id="rel-texto">' + esc(textoResumo) + "</pre>" +
       '<button class="btn btn-primario btn-largo" id="rel-copiar">Copiar resumo</button></section></div>' +
+      blocoPomodoros +
       '<section class="painel"><h2>🍅 Ranking de foco da equipe</h2><p class="muted pequeno">Quem fez mais pomodoros ' + periodo +
       ", em todas as mentorias. Empate: mais horas de estudo.</p>" +
       '<div id="rel-equipe"><p class="muted">Carregando…</p></div></section>' +
@@ -2506,8 +2555,23 @@
   // Bloco de foco de REGRAS.pomodoroMinutos. O estado fica no localStorage com horários absolutos,
   // então o timer continua certo ao trocar de tela, recarregar ou fechar a aba.
   // Só o pomodoro concluído é gravado no banco (que confere se o tempo passou de verdade).
-  const POMO_CHAVE = "academy-pomodoro", POMO_PENDENTES = "academy-pomodoro-pendentes";
+  const POMO_CHAVE = "academy-pomodoro", POMO_PENDENTES = "academy-pomodoro-pendentes", POMO_LIVRE_MIN = "academy-pomodoro-livre-min";
   let pomoAberto = false, pomoConfirmar = false, pomoSom = null;
+
+  // Tipos de pomodoro. Os do campeonato abrem as aulas e contam para ofensiva e placar;
+  // os de foco livre só registram o foco do dia (aparecem no Relatório e na Equipe).
+  const TIPOS_POMO = {
+    estudo: { icone: "🎧", nome: "Estudo", campeonato: true },
+    execucao: { icone: "🛠️", nome: "Execução prática", campeonato: true },
+    leitura: { icone: "📖", nome: "Leitura" },
+    video: { icone: "🎬", nome: "Videoaula / curso" },
+    trabalho: { icone: "💼", nome: "Trabalho" },
+    outro: { icone: "✏️", nome: "Outro" }
+  };
+  const DURACOES_LIVRE = [25, 30, 45, 50];
+  let pomoLivreMin = Number((function () { try { return localStorage.getItem(POMO_LIVRE_MIN); } catch (e) { return null; } })()) || 25;
+  function tipoPomo(t) { return TIPOS_POMO[t] || TIPOS_POMO.estudo; }
+  function nomePomo(p) { return p.tipo === "outro" && p.rotulo ? p.rotulo : tipoPomo(p.tipo).nome; }
 
   function lerJSON(chave) { try { return JSON.parse(localStorage.getItem(chave) || "null"); } catch (e) { return null; } }
   function gravarJSON(chave, v) { try { if (v == null) localStorage.removeItem(chave); else localStorage.setItem(chave, JSON.stringify(v)); } catch (e) { /* sem storage */ } }
@@ -2518,9 +2582,12 @@
   }
   function pomoRestante(e) { return e.pausadoRestante != null ? e.pausadoRestante : Math.max(0, e.fimEm - Date.now()); }
   function relogio(ms) { const s = Math.ceil(ms / 1000); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }
-  function pomodorosHoje() {
+  // Pomodoros de hoje: os do campeonato (padrão) ou os de foco livre
+  function pomodorosHoje(livres) {
     const hoje = diaLocal(new Date());
-    return ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) { return diaLocal(p.concluido_em) === hoje; }).length;
+    return ((S.bruto && S.bruto.pomodoros) || []).filter(function (p) {
+      return diaLocal(p.concluido_em) === hoje && (livres ? !ehCampeonato(p.tipo) : ehCampeonato(p.tipo));
+    }).length;
   }
 
   // Bipe curto pelo WebAudio (liberado no clique de começar, porque o navegador exige um gesto)
@@ -2543,12 +2610,14 @@
   // O início do pomodoro de foco é anotado pelo servidor (academy_iniciar_pomodoro), então só dá
   // para registrar o pomodoro depois que o tempo passou de verdade. Por isso começar precisa de internet.
   let pomoComecando = false;
-  async function pomoComecar(fase, tipo) {
+  async function pomoComecar(fase, tipo, minutos, rotulo) {
     if (pomoComecando) return false;
-    const min = fase === "pausa" ? REGRAS.pausaMinutos : REGRAS.pomodoroMinutos;
+    tipo = fase === "foco" ? (TIPOS_POMO[tipo] ? tipo : "estudo") : null;
+    // Campeonato: sempre REGRAS.pomodoroMinutos. Foco livre: a duração escolhida no painel
+    const min = fase === "pausa" ? REGRAS.pausaMinutos : ehCampeonato(tipo) ? REGRAS.pomodoroMinutos : (minutos || pomoLivreMin);
     try { pomoSom = pomoSom || new (window.AudioContext || window.webkitAudioContext)(); if (pomoSom.resume) pomoSom.resume(); } catch (e) { /* sem áudio */ }
     // Pede permissão de notificação no clique, para avisar quando a pessoa sair da plataforma
-    if (fase === "foco" && tipo !== "execucao" && window.Notification && Notification.permission === "default") {
+    if (fase === "foco" && tipo === "estudo" && window.Notification && Notification.permission === "default") {
       try { Notification.requestPermission(); } catch (e) { /* navegador sem suporte */ }
     }
     let inicioId = null;
@@ -2559,7 +2628,8 @@
       if (r.error) { toast("Não consegui começar o pomodoro: " + traduzErro(r.error), "erro"); return false; }
       inicioId = r.data;
     }
-    gravarJSON(POMO_CHAVE, { uid: S.session.user.id, fase: fase, tipo: fase === "foco" ? (tipo || "estudo") : null, minutos: min, inicioId: inicioId,
+    gravarJSON(POMO_CHAVE, { uid: S.session.user.id, fase: fase, tipo: tipo, minutos: min, inicioId: inicioId,
+      rotulo: tipo === "outro" && rotulo ? String(rotulo).trim().slice(0, 40) : null,
       inicio: Date.now(), fimEm: Date.now() + min * 60000, pausadoRestante: null, foraMs: 0, saidas: 0, saiuEm: null });
     pomoConfirmar = false;
     pomoAtualizar();
@@ -2569,12 +2639,12 @@
   async function pomoSalvar(item) {
     if (!item.inicioId) throw new Error("Pomodoro antigo demais para ser registrado.");
     const r = await sb.rpc("academy_concluir_pomodoro", { p_inicio: item.inicioId, p_minutos: item.minutos,
-      p_tipo: item.tipo || "estudo", p_fora: item.fora_segundos || 0, p_saidas: item.saidas || 0 });
+      p_tipo: item.tipo || "estudo", p_fora: item.fora_segundos || 0, p_saidas: item.saidas || 0, p_rotulo: item.rotulo || null });
     // Já registrado (ex.: outra aba ou nova tentativa): conta como salvo
     if (r.error && !/já registrado/i.test(r.error.message || "")) throw r.error;
     if (r.error) return;
     if (S.bruto) S.bruto.pomodoros.push({ minutos: item.minutos, iniciado_em: item.iniciado_em, concluido_em: new Date().toISOString(),
-      tipo: item.tipo || "estudo", fora_segundos: item.fora_segundos || 0, saidas: item.saidas || 0 });
+      tipo: item.tipo || "estudo", fora_segundos: item.fora_segundos || 0, saidas: item.saidas || 0, rotulo: item.rotulo || null });
   }
 
   // ---------- dispersão: tempo fora da plataforma durante o pomodoro de estudo ----------
@@ -2583,7 +2653,8 @@
   const SAIDA_MINIMA = 10000;
   let pomoAlertas = [];
 
-  function pomoVigiado(e) { return e && e.fase === "foco" && e.tipo !== "execucao" && e.pausadoRestante == null; }
+  // Só o pomodoro de estudo mede o tempo fora (no de execução e no foco livre a pessoa usa outras ferramentas)
+  function pomoVigiado(e) { return e && e.fase === "foco" && (e.tipo || "estudo") === "estudo" && e.pausadoRestante == null; }
   // Ouvindo o resumo em áudio (mesmo com a tela bloqueada) é estudo, não dispersão
   function audioTocando() {
     const a = S.audio;
@@ -2684,17 +2755,20 @@
     pomoFecharSaida(e, e.fimEm);
     pomoAlertas.forEach(clearTimeout);
     pomoAlertas = [];
-    const foraSeg = e.tipo === "execucao" ? 0 : Math.round((e.foraMs || 0) / 1000);
-    gravarJSON(POMO_CHAVE, { uid: e.uid, fase: "feito", tipo: e.tipo, foraSeg: foraSeg, saidas: e.saidas || 0 });
+    const estudo = (e.tipo || "estudo") === "estudo";
+    const foraSeg = estudo ? Math.round((e.foraMs || 0) / 1000) : 0;
+    gravarJSON(POMO_CHAVE, { uid: e.uid, fase: "feito", tipo: e.tipo, rotulo: e.rotulo || null, minutos: e.minutos, foraSeg: foraSeg, saidas: estudo ? (e.saidas || 0) : 0 });
     pomoAberto = true;
     pomoNotificar("🍅 Pomodoro concluído!", "Hora da pausa de " + REGRAS.pausaMinutos + " minutos.");
     const item = { uid: e.uid, minutos: e.minutos, iniciado_em: new Date(e.inicio).toISOString(), inicioId: e.inicioId,
-      tipo: e.tipo || "estudo", fora_segundos: foraSeg, saidas: e.tipo === "execucao" ? 0 : (e.saidas || 0) };
+      tipo: e.tipo || "estudo", fora_segundos: foraSeg, saidas: estudo ? (e.saidas || 0) : 0, rotulo: e.rotulo || null };
     try {
       await pomoSalvar(item);
       const o = calcularOfensiva();
       const disperso = foraSeg >= REGRAS.limiteForaMinutos * 60;
-      toast(disperso
+      if (!ehCampeonato(e.tipo)) {
+        toast(tipoPomo(e.tipo).icone + " Foco livre concluído: " + e.minutos + " min de " + nomePomo(e) + ". Registrado no seu relatório.", "ok");
+      } else toast(disperso
         ? "Pomodoro disperso: " + tempoTxt(foraSeg) + " fora da plataforma. Ele não conta para a ofensiva" + (o.pomodorosHoje ? " (mas você já tem um válido hoje)." : ": faça outro com foco.")
         : "Pomodoro concluído! " + (o.batidaHoje ? "Ofensiva do dia garantida 🔥" : o.hoje >= o.meta ? "" : "Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva."), disperso ? "erro" : "ok");
       if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) confete();
@@ -2731,24 +2805,44 @@
       '<button class="btn btn-secundario" data-pomo="foco-exec"><span>🛠️ Execução prática</span><small>fazer a parte prática em outras ferramentas</small></button></div>';
   }
 
+  // Foco livre: duração (25 a 50 min) e o que a pessoa vai fazer. Não conta para o campeonato.
+  function botoesFocoLivre() {
+    return '<div class="pomo-livre">' +
+      '<div class="pomo-duracoes" role="group" aria-label="Duração do foco livre">' + DURACOES_LIVRE.map(function (m) {
+        return '<button class="pomo-dur' + (m === pomoLivreMin ? " ativo" : "") + '" data-pomo="min" data-min="' + m + '">' + m + " min</button>";
+      }).join("") + "</div>" +
+      '<div class="pomo-livre-tipos">' + ["leitura", "video", "trabalho"].map(function (t) {
+        return '<button class="btn btn-secundario" data-pomo="livre" data-tipo="' + t + '">' + TIPOS_POMO[t].icone + " " + TIPOS_POMO[t].nome + "</button>";
+      }).join("") + "</div>" +
+      '<div class="pomo-outro"><input id="pomo-rotulo" maxlength="40" placeholder="Outro: dê um nome (ex.: planejamento)" aria-label="Nome do foco livre">' +
+      '<button class="btn btn-secundario" data-pomo="livre" data-tipo="outro">✏️ Começar</button></div></div>';
+  }
+
   function pomoPainelHTML(e) {
-    const hoje = pomodorosHoje(), validos = calcularOfensiva().pomodorosHoje, disp = hoje - validos;
-    const contagem = '<p class="pomo-hoje">Hoje: <b>' + hoje + "</b> pomodoro" + (hoje === 1 ? "" : "s") + " concluído" + (hoje === 1 ? "" : "s") +
+    const hoje = pomodorosHoje(), validos = calcularOfensiva().pomodorosHoje, disp = hoje - validos, livresHoje = pomodorosHoje(true);
+    const contagem = '<p class="pomo-hoje">Hoje: <b>' + hoje + "</b> do campeonato" +
       (disp ? " (" + disp + " disperso" + (disp === 1 ? "" : "s") + ", não conta" + (disp === 1 ? "" : "m") + ")" : "") +
-      (validos ? " ✅" : " · a ofensiva do dia pede pelo menos 1 sem dispersão") + "</p>";
+      (validos ? " ✅" : " · a ofensiva pede 1 sem dispersão") +
+      (livresHoje ? " · <b>" + livresHoje + "</b> de foco livre" : "") + "</p>";
+    const secoes = function (secundario) {
+      return '<p class="pomo-secao">🏆 Campeonato <small>abre as aulas e conta para a ofensiva</small></p>' + botoesPomodoro(secundario) +
+        '<p class="pomo-secao">🎯 Foco livre <small>para ler, ver curso ou trabalhar · não conta no campeonato</small></p>' + botoesFocoLivre();
+    };
     let corpo;
     if (!e) {
-      corpo = '<p class="pomo-texto">' + REGRAS.pomodoroMinutos + " minutos de foco em uma coisa só: celular longe, uma aba aberta, sem responder mensagem. " +
-        "No fim, " + REGRAS.pausaMinutos + " minutos de pausa.</p>" + contagem + botoesPomodoro();
+      corpo = '<p class="pomo-texto">Foco em uma coisa só: celular longe, uma aba aberta, sem responder mensagem. No fim, ' + REGRAS.pausaMinutos + " minutos de pausa.</p>" +
+        contagem + secoes();
     } else if (e.fase === "feito") {
       const disperso = e.foraSeg >= REGRAS.limiteForaMinutos * 60;
-      corpo = '<div class="pomo-feito">🍅</div><p class="pomo-texto"><b>Pomodoro concluído!</b> Levante, beba água e descanse a cabeça antes do próximo.</p>' +
-        (e.tipo !== "execucao" && e.foraSeg != null
+      corpo = '<div class="pomo-feito">' + (ehCampeonato(e.tipo) ? "🍅" : tipoPomo(e.tipo).icone) + '</div><p class="pomo-texto"><b>' +
+        (ehCampeonato(e.tipo) ? "Pomodoro concluído!" : "Foco livre concluído: " + esc(nomePomo(e)) + (e.minutos ? " · " + e.minutos + " min" : "")) +
+        "</b> Levante, beba água e descanse a cabeça antes do próximo.</p>" +
+        ((e.tipo || "estudo") === "estudo" && e.foraSeg != null
           ? '<p class="pomo-fora' + (disperso ? " disperso" : "") + '">' + (e.foraSeg < 10 ? "🎯 Sem sair da plataforma. Foco total!" :
             "👀 " + tempoFora(e.foraSeg) + " fora da plataforma em " + e.saidas + " saída" + (e.saidas === 1 ? "" : "s") + (disperso ? " · pomodoro disperso, não conta para a ofensiva" : "")) + "</p>"
           : "") + contagem +
         '<div class="pomo-acoes"><button class="btn btn-primario" data-pomo="pausa">Pausa de ' + REGRAS.pausaMinutos + " min</button></div>" +
-        '<p class="pomo-hoje pomo-ou">ou comece o próximo:</p>' + botoesPomodoro(true);
+        '<p class="pomo-hoje pomo-ou">ou comece o próximo:</p>' + secoes(true);
     } else {
       const rest = pomoRestante(e), total = e.minutos * 60000;
       const pct = Math.round((1 - rest / total) * 100);
@@ -2758,7 +2852,9 @@
         (e.fase === "pausa"
           ? '<p class="pomo-texto">Descanse longe da tela. O próximo pomodoro começa quando você quiser.</p>' +
             '<div class="pomo-acoes"><button class="btn btn-secundario" data-pomo="pular">Pular pausa</button></div>'
-          : (e.tipo === "execucao"
+          : (!ehCampeonato(e.tipo)
+              ? '<p class="pomo-texto">' + tipoPomo(e.tipo).icone + " <b>" + esc(nomePomo(e)) + "</b> · foco livre de " + e.minutos + " min. Não conta para o campeonato e não abre as aulas.</p>"
+            : e.tipo === "execucao"
               ? '<p class="pomo-texto">🛠️ <b>Execução prática.</b> Pode usar outras ferramentas à vontade; o tempo fora não conta como dispersão.</p>'
               : '<p class="pomo-texto">🎧 <b>Estudo.</b> Fique na plataforma: sair para outra aba ou programa conta como tempo disperso.</p>' +
                 '<p class="pomo-fora' + ((e.foraMs || 0) >= REGRAS.limiteForaMinutos * 60000 ? " disperso" : "") + '">Fora da plataforma: <b>' +
@@ -2767,7 +2863,7 @@
                 ((e.foraMs || 0) >= REGRAS.limiteForaMinutos * 60000 ? " · disperso, não vai contar para a ofensiva" : "") + "</p>") + contagem +
             '<div class="pomo-acoes"><button class="btn btn-secundario" data-pomo="' + (pausado ? "retomar" : "pausar") + '">' + (pausado ? "▶ Retomar" : "⏸ Pausar") + "</button>" +
             '<button class="btn btn-secundario btn-perigo" data-pomo="cancelar">' + (pomoConfirmar ? "Confirmar: cancelar" : "Cancelar") + "</button></div>" +
-            (pomoConfirmar ? '<p class="pomo-aviso">Cancelando, este pomodoro não conta para a ofensiva.</p>' : ""));
+            (pomoConfirmar ? '<p class="pomo-aviso">Cancelando, este pomodoro não ' + (ehCampeonato(e.tipo) ? "conta para a ofensiva." : "fica registrado.") + "</p>" : ""));
     }
     corpo += '<a class="pomo-relatorio" href="#/relatorio" data-pomo="fechar">📊 Ver meu relatório de estudo</a>';
     return '<div class="pomo-cabeca"><h3>🍅 Pomodoro</h3><button class="pomo-fechar" data-pomo="fechar" aria-label="Fechar">×</button></div>' + corpo;
@@ -2788,7 +2884,8 @@
     }
     const chip = document.getElementById("pomo-chip");
     if (chip) {
-      chip.classList.toggle("ativo", !!ativo && e.fase === "foco");
+      chip.classList.toggle("ativo", !!ativo && e.fase === "foco" && ehCampeonato(e.tipo));
+      chip.classList.toggle("livre", !!ativo && e.fase === "foco" && !ehCampeonato(e.tipo));
       chip.classList.toggle("pausa", !!ativo && e.fase === "pausa");
       chip.classList.toggle("feito", pomodorosHoje() > 0 && !ativo);
       document.getElementById("pomo-chip-tempo").textContent = ativo ? relogio(pomoRestante(e)) : pomodorosHoje() ? pomodorosHoje() + " hoje" : "Foco";
@@ -2805,7 +2902,7 @@
       document.body.appendChild(painel);
     }
     // Só o relógio muda a cada segundo; o resto do painel é redesenhado quando o estado muda
-    const assinatura = JSON.stringify([e, pomoConfirmar, pomodorosHoje()]);
+    const assinatura = JSON.stringify([e, pomoConfirmar, pomodorosHoje(), pomodorosHoje(true), pomoLivreMin]);
     if (painel.dataset.assinatura !== assinatura || !ativo) {
       if (painel.dataset.assinatura !== assinatura) painel.innerHTML = pomoPainelHTML(e);
       painel.dataset.assinatura = assinatura;
@@ -2834,6 +2931,17 @@
     if (!b) return;
     const acao = b.dataset.pomo, e = pomoEstado();
     if (acao === "fechar") { pomoAberto = false; pomoConfirmar = false; }
+    else if (acao === "min") {
+      pomoLivreMin = Number(b.dataset.min) || 25;
+      try { localStorage.setItem(POMO_LIVRE_MIN, String(pomoLivreMin)); } catch (err) { /* sem storage */ }
+    }
+    else if (acao === "livre") {
+      const campo = document.getElementById("pomo-rotulo");
+      const rotulo = b.dataset.tipo === "outro" && campo ? campo.value : null;
+      b.disabled = true;
+      pomoComecar("foco", b.dataset.tipo, pomoLivreMin, rotulo).then(function () { b.disabled = false; });
+      return;
+    }
     else if (acao === "foco" || acao === "foco-exec" || acao === "pausa") {
       const noPortao = !!document.querySelector(".portao");
       b.disabled = true;
@@ -2862,7 +2970,8 @@
     if (!REGRAS.aulaSoComPomodoro) return true;
     if (REGRAS.adminsSemPortao && S.perfil && S.perfil.is_admin) return true;
     const e = pomoEstado();
-    if (!e || e.fase !== "foco") return false;
+    // Só o pomodoro do campeonato abre as aulas (o de foco livre não)
+    if (!e || e.fase !== "foco" || !ehCampeonato(e.tipo)) return false;
     // Pausa longa (mais de 10 minutos) fecha a aula até retomar o pomodoro
     return e.pausadoRestante == null || !e.pausadoEm || Date.now() - e.pausadoEm < PAUSA_MAXIMA;
   }
@@ -2878,7 +2987,10 @@
       "<h1>Comece um pomodoro para entrar na aula</h1>" +
       '<p class="muted">As aulas só abrem com o foco ligado: são ' + REGRAS.pomodoroMinutos + " minutos dedicados a uma coisa só. Escolha o tipo do pomodoro:</p>" +
       (e && e.fase === "pausa" ? '<p class="aviso">Você está na pausa. Se já descansou, pode começar o próximo agora.</p>' : "") +
-      (e && e.fase === "foco" && e.pausadoRestante != null
+      (e && e.fase === "foco" && !ehCampeonato(e.tipo)
+        ? '<p class="aviso">Você está num pomodoro de foco livre (' + tipoPomo(e.tipo).icone + " " + esc(nomePomo(e)) + "). As aulas abrem só com pomodoro do campeonato: " +
+          "começando um aqui embaixo, o foco livre é substituído.</p>" : "") +
+      (e && e.fase === "foco" && ehCampeonato(e.tipo) && e.pausadoRestante != null
         ? '<p class="aviso">Seu pomodoro está pausado há mais de 10 minutos. Retome no 🍅 (no topo) para entrar, ou comece um novo.</p>' +
           '<p><button class="btn btn-primario" data-pomodoro-abrir>🍅 Abrir o pomodoro</button></p>' : "") +
       botoesPomodoro() +
