@@ -224,30 +224,39 @@ $$;
 revoke execute on function public.academy_iniciar_pomodoro() from public, anon;
 grant execute on function public.academy_iniciar_pomodoro() to authenticated;
 
--- Concluir: só vale se o tempo passou de verdade desde o início anotado pelo servidor
-create or replace function public.academy_concluir_pomodoro(p_inicio uuid, p_minutos int, p_tipo text, p_fora int, p_saidas int)
+-- Concluir: só vale se o tempo passou de verdade desde o início anotado pelo servidor.
+-- Competição (estudo, execucao): 30 a 120 minutos. Foco livre (leitura, video, trabalho, outro): 25 a 120,
+-- com um rótulo opcional; ele não conta para ofensiva, placar nem rankings.
+drop function if exists public.academy_concluir_pomodoro(uuid, int, text, int, int);
+create or replace function public.academy_concluir_pomodoro(p_inicio uuid, p_minutos int, p_tipo text, p_fora int, p_saidas int, p_rotulo text default null)
 returns void
 language plpgsql security definer set search_path = public
 as $$
 declare
   ini timestamptz;
+  tipo_ok text := case when p_tipo in ('estudo', 'execucao', 'leitura', 'video', 'trabalho', 'outro') then p_tipo else 'estudo' end;
+  livre boolean := tipo_ok in ('leitura', 'video', 'trabalho', 'outro');
 begin
   select i.iniciado_em into ini from public.academy_pomodoro_inicios i
   where i.id = p_inicio and i.user_id = auth.uid() and not i.usado
   for update;
   if ini is null then raise exception 'Pomodoro não encontrado (ou já registrado).'; end if;
-  if p_minutos is null or p_minutos < 30 or p_minutos > 120 then raise exception 'Duração inválida.'; end if;
+  if p_minutos is null or p_minutos > 120 or p_minutos < (case when livre then 25 else 30 end) then
+    raise exception 'Duração inválida.';
+  end if;
   if ini > now() - make_interval(mins => p_minutos) + interval '1 minute' then
     raise exception 'Pomodoro incompleto: o tempo de foco ainda não terminou.';
   end if;
   update public.academy_pomodoro_inicios set usado = true where id = p_inicio;
-  insert into public.academy_pomodoros (user_id, minutos, iniciado_em, tipo, fora_segundos, saidas)
-  values (auth.uid(), p_minutos, ini, case when p_tipo = 'execucao' then 'execucao' else 'estudo' end,
-          coalesce(p_fora, 0), coalesce(p_saidas, 0));
+  insert into public.academy_pomodoros (user_id, minutos, iniciado_em, tipo, fora_segundos, saidas, rotulo)
+  values (auth.uid(), p_minutos, ini, tipo_ok,
+          case when tipo_ok = 'estudo' then coalesce(p_fora, 0) else 0 end,
+          case when tipo_ok = 'estudo' then coalesce(p_saidas, 0) else 0 end,
+          case when livre then nullif(left(trim(coalesce(p_rotulo, '')), 40), '') end);
 end;
 $$;
-revoke execute on function public.academy_concluir_pomodoro(uuid, int, text, int, int) from public, anon;
-grant execute on function public.academy_concluir_pomodoro(uuid, int, text, int, int) to authenticated;
+revoke execute on function public.academy_concluir_pomodoro(uuid, int, text, int, int, text) from public, anon;
+grant execute on function public.academy_concluir_pomodoro(uuid, int, text, int, int, text) to authenticated;
 
 -- A partir de agora pomodoro só entra pela função acima
 revoke insert on public.academy_pomodoros from authenticated;

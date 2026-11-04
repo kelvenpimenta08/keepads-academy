@@ -24,6 +24,7 @@ as $$
     select p.user_id, p.minutos, p.concluido_em, p.tipo, p.fora_segundos, p.saidas
     from public.academy_pomodoros p
     where p.concluido_em >= greatest(p_inicio, public.academy_inicio_contagem()) and p.concluido_em < p_fim
+      and p.tipo in ('estudo', 'execucao')   -- foco livre fica fora do ranking de foco
   ),
   pom_soma as (
     select p.user_id, count(*)::int as n, sum(p.minutos)::int as m,
@@ -45,7 +46,7 @@ as $$
       case when r.gap is not null and r.gap <= interval '5 minutes' then extract(epoch from r.gap) else 30 end as s,
       exists (
         select 1 from public.academy_pomodoros p
-        where p.user_id = r.user_id and r.reviewed_at between p.iniciado_em and p.concluido_em
+        where p.user_id = r.user_id and p.tipo in ('estudo', 'execucao') and r.reviewed_at between p.iniciado_em and p.concluido_em
       ) as no_foco
     from rev r
   ),

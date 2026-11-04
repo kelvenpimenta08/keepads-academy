@@ -18,8 +18,18 @@ create index if not exists academy_pomodoros_user_idx on public.academy_pomodoro
 alter table public.academy_pomodoros add column if not exists tipo text not null default 'estudo';
 alter table public.academy_pomodoros add column if not exists fora_segundos int not null default 0;
 alter table public.academy_pomodoros add column if not exists saidas int not null default 0;
+-- Foco livre (leitura, video, trabalho, outro): pomodoro só para foco, fora da competição.
+-- Não abre aulas e não conta para ofensiva, placar nem rankings (as consultas filtram estudo/execucao).
+-- rotulo = o nome que a pessoa dá ao foco livre "outro" (ex.: "planejamento").
+alter table public.academy_pomodoros add column if not exists rotulo text;
+alter table public.academy_pomodoros drop constraint if exists academy_pomodoros_rotulo_chk;
+alter table public.academy_pomodoros add constraint academy_pomodoros_rotulo_chk check (rotulo is null or length(rotulo) <= 40);
 alter table public.academy_pomodoros drop constraint if exists academy_pomodoros_tipo_chk;
-alter table public.academy_pomodoros add constraint academy_pomodoros_tipo_chk check (tipo in ('estudo', 'execucao'));
+alter table public.academy_pomodoros add constraint academy_pomodoros_tipo_chk
+  check (tipo in ('estudo', 'execucao', 'leitura', 'video', 'trabalho', 'outro'));
+-- O foco livre pode ter 25 minutos; o da competição continua com 30 (conferido em academy_concluir_pomodoro)
+alter table public.academy_pomodoros drop constraint if exists academy_pomodoros_minutos_check;
+alter table public.academy_pomodoros add constraint academy_pomodoros_minutos_check check (minutos between 25 and 120);
 
 -- O horário de conclusão é sempre o do servidor, e o pomodoro só vale se os minutos
 -- realmente passaram desde o início (com 1 minuto de tolerância).
@@ -35,8 +45,8 @@ begin
   if new.iniciado_em < now() - interval '1 day' then
     raise exception 'Pomodoro antigo demais para ser registrado.';
   end if;
-  -- Tempo fora nunca passa da duração do pomodoro; no de execução ele não é medido
-  if new.tipo = 'execucao' then
+  -- Tempo fora nunca passa da duração do pomodoro; só é medido no pomodoro de estudo
+  if new.tipo <> 'estudo' then
     new.fora_segundos := 0; new.saidas := 0;
   end if;
   new.fora_segundos := least(greatest(coalesce(new.fora_segundos, 0), 0), new.minutos * 60);
@@ -81,7 +91,8 @@ as $$
   focos as (
     select distinct p.user_id, (p.concluido_em at time zone 'America/Sao_Paulo')::date as dia
     from public.academy_pomodoros p
-    where (p.tipo = 'execucao' or p.fora_segundos < 300) and p.concluido_em >= public.academy_inicio_contagem()
+    where p.tipo in ('estudo', 'execucao')   -- foco livre não conta
+      and (p.tipo = 'execucao' or p.fora_segundos < 300) and p.concluido_em >= public.academy_inicio_contagem()
   ),
   dias as (
     select r.user_id, r.dia from revisoes r join focos f on f.user_id = r.user_id and f.dia = r.dia

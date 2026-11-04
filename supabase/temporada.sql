@@ -65,7 +65,8 @@ as $$
   focos as (
     select distinct p.user_id, (p.concluido_em at time zone 'America/Sao_Paulo')::date as dia
     from public.academy_pomodoros p cross join cfg
-    where (p.tipo = 'execucao' or p.fora_segundos < coalesce((p_regras ->> 'limiteFora')::int, 300))
+    where p.tipo in ('estudo', 'execucao')   -- foco livre não conta
+      and (p.tipo = 'execucao' or p.fora_segundos < coalesce((p_regras ->> 'limiteFora')::int, 300))
       and p.concluido_em >= cfg.ts0
   ),
   dias_meta as (
