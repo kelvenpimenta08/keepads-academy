@@ -280,6 +280,24 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .relatorio-detalhe li { display: flex; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-top: 1px solid var(--borda); font-size: .92rem; }
 .relatorio-texto { white-space: pre-wrap; background: var(--fundo); border-radius: 10px; padding: .9rem 1rem; font: 400 .9rem/1.6 var(--fonte-texto); margin: .6rem 0 1rem; }
 .relatorio-sub { font-size: 1rem; margin: 1.4rem 0 0; }
+/* Pomodoro: seções Campeonato e Foco livre */
+.pomo-secao { font-weight: 700; font-size: .92rem; margin: .9rem 0 .45rem; }
+.pomo-secao small { display: block; font-weight: 400; font-size: .78rem; color: var(--muted); }
+.pomo-livre { display: grid; gap: .5rem; }
+.pomo-duracoes { display: flex; gap: .3rem; background: var(--fundo); border-radius: 10px; padding: 3px; }
+.pomo-dur { flex: 1; border: 0; background: none; border-radius: 8px; padding: .45rem .2rem; font: 600 .82rem var(--fonte-texto); color: var(--muted); cursor: pointer; min-height: 36px; }
+.pomo-dur.ativo { background: #fff; color: var(--texto); box-shadow: var(--sombra); }
+.pomo-livre-tipos { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .35rem; }
+.pomo-livre-tipos .btn { flex-direction: column; padding: .55rem .3rem; font-size: .8rem; line-height: 1.2; text-align: center; }
+.pomo-outro { display: flex; gap: .35rem; }
+.pomo-outro input { margin: 0; flex: 1; min-width: 0; padding: .55rem .7rem; }
+.pomo-outro .btn { padding: .55rem .7rem; font-size: .82rem; white-space: nowrap; }
+.pomodoro-chip.livre { background: #4f7cff; color: #fff; }
+.graf-livre { background: #a9bdfc; display: block; }
+.relatorio-pomos { margin: .2rem 0 .8rem; }
+.relatorio-pomos .var { display: inline; color: var(--muted); }
+.relatorio-pomos .var.sobe { color: var(--verde-escuro); }
+.relatorio-pomos .var.desce { color: var(--erro); }
 .pomo-tipos { display: grid; gap: .5rem; }
 .pomo-tipos .btn { flex-direction: column; align-items: flex-start; text-align: left; gap: .1rem; padding: .7rem 1rem; }
 .pomo-tipos .btn small { font-weight: 400; font-size: .8rem; opacity: .75; }
