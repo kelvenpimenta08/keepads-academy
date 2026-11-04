@@ -1752,17 +1752,39 @@
       : antesDaLargada(s) ? "<b>Começa hoje às " + horaLargada() + "</b>. Até lá, nada pontua"
       : s.fase === "andamento" ? "Dia <b>" + s.dia + "</b> de " + s.total + (s.dias ? " · faltam <b>" + s.dias + "</b> " + (s.dias === 1 ? "dia" : "dias") : " · <b>último dia!</b>")
       : "Temporada encerrada em " + dataBR(dataLocal(t.fim));
-    const hero = '<section class="hero hero-temporada"><div>' +
+    // Classificação geral: é o destaque da página e abre a tela, com pódio e tabela completa
+    const totalPremios = t.premios.reduce(function (soma, p) { return soma + (p.valor || 0); }, 0);
+    const medalhas = ["🥇", "🥈", "🥉"];
+    const podio = concorrentes.filter(function (l) { return l.xp > 0; }).slice(0, 3);
+    const placar = '<section class="placar-destaque">' +
+      '<div class="hero hero-temporada placar-cabeca"><div>' +
       '<p class="hero-kicker">' + esc(t.nome.toLowerCase()) + " · " + esc((curso.mentor || "").toLowerCase()) + "</p>" +
-      "<h1>" + esc(curso.titulo) + "</h1>" +
-      "<p>" + quando + " · de " + dataBR(dataLocal(t.inicio)) + " a " + dataBR(dataLocal(t.fim)) + "</p>" +
+      "<h1>🏆 Campeonato Keep Ads</h1>" +
+      '<p class="placar-sub">Classificação geral · ' + esc(curso.titulo) + "</p>" +
+      "<p>" + quando + " · de " + dataBR(dataLocal(t.inicio)) + " a " + dataBR(dataLocal(t.fim)) +
+      (totalPremios ? " · <b>R$ " + totalPremios.toLocaleString("pt-BR") + " em prêmios</b>" : "") + "</p>" +
       barra(s.pct, "barra-temporada") + "</div>" +
       (meu ? (function () {
         const nv = nivelDe(meu.xp);
         return '<div class="hero-stats"><div><b>' + (meu.concorre ? meu.pos + "º" : "—") + "</b><span>" + (meu.concorre ? "sua posição" : "organizador") + "</span></div>" +
-          "<div><b>" + meu.xp + "</b><span>XP na temporada</span></div>" +
+          "<div><b>" + meu.xp + "</b><span>seu XP</span></div>" +
           "<div><b>" + nv.atual.icone + "</b><span>" + esc(nv.atual.nome) + "</span></div></div>";
-      })() : "") +
+      })() : "") + "</div>" +
+      (podio.length ? '<div class="podio placar-podio">' + podio.map(function (l, i) {
+        return '<div class="podio-lugar lugar-' + (i + 1) + (l.user_id === eu ? " voce" : "") + '"><span class="medalha">' + medalhas[i] + "</span>" +
+          "<b>" + esc((l.nome || "Sem nome").split(" ")[0]) + '</b><span class="podio-nota">' + l.xp + ' <small>XP</small></span>' +
+          '<span class="muted pequeno">🔥 ' + l.ofensiva_max + " · " + nivelDe(l.xp).atual.icone + "</span></div>";
+      }).join("") + "</div>" : '<p class="placar-vazio">Ninguém pontuou ainda. O primeiro XP do dia já coloca você no pódio.</p>') +
+      '<div class="tabela-rolagem sem-sombra"><table class="tabela tabela-placar"><thead><tr>' +
+      "<th>#</th><th>Nome</th><th>XP</th><th>Semana</th><th>Ofensiva</th><th>Nível</th><th>Provas</th></tr></thead><tbody>" +
+      linhas.map(function (l) {
+        const nv = nivelDe(l.xp);
+        return "<tr" + (l.user_id === eu ? ' class="voce"' : "") + "><td><b>" + (l.concorre ? (l.pos <= 3 && l.xp > 0 ? medalhas[l.pos - 1] : l.pos + "º") : "—") + "</b></td>" +
+          "<td>" + esc(l.nome || "Sem nome") + (l.user_id === eu ? ' <span class="chip chip-ok">você</span>' : "") + (l.concorre ? "" : ' <span class="chip chip-cinza">organizador</span>') + "</td>" +
+          "<td><b>" + l.xp + "</b></td><td>" + l.semana + "</td><td>🔥 " + l.ofensiva_max + "</td>" +
+          "<td>" + nv.atual.icone + " " + esc(nv.atual.nome) + "</td><td>" + (l.media_provas !== null ? l.media_provas : "—") + "</td></tr>";
+      }).join("") + "</tbody></table></div>" +
+      '<p class="muted pequeno">Empate: ganha quem tiver a maior média nas provas. O placar atualiza sozinho a cada flashcard, pomodoro, prática e prova.</p>' +
       "</section>";
 
     const meuBloco = meu ? (function () {
@@ -1808,20 +1830,11 @@
           : pontuou(l, p.id) ? (s.fase === "fim" ? "Ganhador: " : "Liderando: ") + "<b>" + esc(l.nome || "Sem nome") + "</b>" : "Ninguém pontuou ainda") + "</p></article>";
     }).join("") + "</section>" : '<div class="painel"><p class="muted">Os prêmios desta temporada serão anunciados antes do início.</p></div>';
 
-    const tabela = '<section class="painel"><h2>Placar geral</h2><div class="tabela-rolagem sem-sombra"><table class="tabela"><thead><tr>' +
-      "<th>#</th><th>Nome</th><th>Nível</th><th>XP</th><th>Semana</th><th>Ofensiva</th><th>Provas</th></tr></thead><tbody>" +
-      linhas.map(function (l) {
-        const nv = nivelDe(l.xp);
-        return "<tr" + (l.user_id === eu ? ' class="voce"' : "") + "><td>" + (l.concorre ? l.pos + "º" : "—") + "</td>" +
-          "<td>" + esc(l.nome || "Sem nome") + (l.concorre ? "" : ' <span class="chip chip-cinza">organizador</span>') + "</td>" +
-          "<td>" + nv.atual.icone + " " + esc(nv.atual.nome) + "</td><td><b>" + l.xp + "</b></td><td>" + l.semana + "</td>" +
-          "<td>🔥 " + l.ofensiva_max + "</td><td>" + (l.media_provas !== null ? l.media_provas : "—") + "</td></tr>";
-      }).join("") + "</tbody></table></div></section>";
-
-    const regras = '<section class="painel metodo-temporada"><h2>Como ganhar XP</h2>' + tabelaXP(curso) + regrasTemporada(t) +
+    const regras = '<section class="painel metodo-temporada"><h2>Regras e como ganhar XP</h2>' + tabelaXP(curso) + regrasTemporada(t) +
       '<p class="muted pequeno">Explicação completa em <a href="#/como-funciona">Como funciona</a>.</p></section>';
 
-    layout(hero + meuBloco + premios + '<div class="temporada-grade">' + blocoSemana + tabela + "</div>" + regras);
+    // Ordem: placar geral (destaque) → destaque da semana → meu XP e selos → prêmios → regras
+    layout(placar + blocoSemana + meuBloco + '<h2 class="temporada-titulo">🎁 Prêmios</h2>' + premios + regras);
   }
 
   async function telaRanking() {
