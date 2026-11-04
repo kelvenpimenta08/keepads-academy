@@ -240,6 +240,10 @@
   // Mesma conta para qualquer pessoa (a tela Equipe usa para mostrar a ofensiva de cada um)
   function ofensivaDe(log, pomodoros) {
     const porDia = {}, focoPorDia = {};
+    // Só conta o que foi feito depois do início da competição
+    const inicio = REGRAS.inicioContagem ? Date.parse(REGRAS.inicioContagem) : 0;
+    log = log.filter(function (l) { return Date.parse(l.reviewed_at) >= inicio; });
+    pomodoros = pomodoros.filter(function (p) { return Date.parse(p.concluido_em) >= inicio; });
     log.forEach(function (l) {
       const d = diaLocal(l.reviewed_at);
       porDia[d] = (porDia[d] || 0) + 1;
@@ -1677,13 +1681,23 @@
   }
 
   // Faixa da temporada na tela de mentorias
+  // Primeiro dia da temporada, antes do horário de largada (REGRAS.inicioContagem): ainda não começou
+  function antesDaLargada(s) {
+    return s.fase === "andamento" && s.dia === 1 && REGRAS.inicioContagem && Date.now() < Date.parse(REGRAS.inicioContagem);
+  }
+  function horaLargada() {
+    const d = new Date(REGRAS.inicioContagem);
+    return d.getHours() + "h" + (d.getMinutes() ? dois(d.getMinutes()) : "");
+  }
+
   function bannerTemporada() {
     const t = temporadaAtual();
     if (!t) return "";
     const s = situacaoTemporada(t);
     const c = CURSOS.find(function (x) { return x.id === t.curso; });
     const premio = t.premios.reduce(function (soma, p) { return soma + (p.valor || 0); }, 0);
-    const quando = s.fase === "antes" ? "começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>"
+    const quando = antesDaLargada(s) ? "<b>começa hoje às " + horaLargada() + "</b>"
+      : s.fase === "antes" ? "começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>"
       : s.fase === "andamento" ? (s.dias ? "faltam <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>" : "<b>último dia!</b>") : "encerrada";
     return '<a class="banner-temporada" href="#/temporada"><span class="bt-icone">🏆</span><span class="bt-texto"><b>' + esc(t.nome) + "</b> · " +
       esc(c ? c.titulo : "") + " · " + quando + (premio ? " · R$ " + premio.toLocaleString("pt-BR") + " em prêmios" : "") +
@@ -1735,6 +1749,7 @@
     };
 
     const quando = s.fase === "antes" ? "Começa em <b>" + s.dias + (s.dias === 1 ? " dia" : " dias") + "</b>"
+      : antesDaLargada(s) ? "<b>Começa hoje às " + horaLargada() + "</b>. Até lá, nada pontua"
       : s.fase === "andamento" ? "Dia <b>" + s.dia + "</b> de " + s.total + (s.dias ? " · faltam <b>" + s.dias + "</b> " + (s.dias === 1 ? "dia" : "dias") : " · <b>último dia!</b>")
       : "Temporada encerrada em " + dataBR(dataLocal(t.fim));
     const hero = '<section class="hero hero-temporada"><div>' +
