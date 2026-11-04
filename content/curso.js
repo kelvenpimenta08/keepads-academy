@@ -6,6 +6,9 @@
 (function () {
   // Regras gerais do Academy (valem para todos os cursos)
   window.ACADEMY_REGRAS = {
+    // Início da competição: antes disso nada conta para a ofensiva nem para os rankings
+    // (o banco usa o mesmo momento, gravado em academy_config pelo supabase/inicio.sql)
+    inicioContagem: "2026-11-04T00:00:00-03:00",
     metaDiaria: 5,          // flashcards revisados no dia para contar na ofensiva (o ranking usa o mesmo número)
     pomodoroMinutos: 30,    // bloco de foco; a ofensiva do dia exige pelo menos 1 pomodoro concluído (o banco exige 30 min ou mais)
     pausaMinutos: 5,        // pausa sugerida depois de cada pomodoro
