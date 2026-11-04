@@ -25,6 +25,8 @@ as $$
   cfg as (
     select
       p_inicio as ini, p_fim as fim,
+      -- Momento a partir do qual tudo conta: o início da temporada ou o início da competição (supabase/inicio.sql), o que vier depois
+      greatest((p_inicio::timestamp at time zone 'America/Sao_Paulo'), public.academy_inicio_contagem()) as ts0,
       (now() at time zone 'America/Sao_Paulo')::date as hoje,
       coalesce((p_regras ->> 'revisao')::numeric, 1) as r_rev,
       coalesce((p_regras ->> 'limiteDia')::numeric, 40) as r_lim,
@@ -49,6 +51,7 @@ as $$
     from public.academy_review_log l cross join cfg
     where l.curso = p_curso
       and (l.reviewed_at at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      and l.reviewed_at >= cfg.ts0
     group by 1, 2
   ),
   ev_rev as (
@@ -61,8 +64,9 @@ as $$
   -- sem dispersão (pomodoro de estudo com limiteFora segundos ou mais fora da plataforma não conta).
   focos as (
     select distinct p.user_id, (p.concluido_em at time zone 'America/Sao_Paulo')::date as dia
-    from public.academy_pomodoros p
-    where p.tipo = 'execucao' or p.fora_segundos < coalesce((p_regras ->> 'limiteFora')::int, 300)
+    from public.academy_pomodoros p cross join cfg
+    where (p.tipo = 'execucao' or p.fora_segundos < coalesce((p_regras ->> 'limiteFora')::int, 300))
+      and p.concluido_em >= cfg.ts0
   ),
   dias_meta as (
     select d.user_id, d.dia from dia_rev d cross join cfg
@@ -94,6 +98,7 @@ as $$
     from public.academy_card_states c cross join cfg
     where c.curso = p_curso and c.interval_days >= 7
       and (c.last_review at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      and c.last_review >= cfg.ts0
   ),
   -- Partes práticas marcadas na temporada, com relato
   ev_prat as (
@@ -101,6 +106,7 @@ as $$
     from public.academy_practice_checks p cross join cfg
     where p.curso = p_curso and p.done and length(trim(coalesce(p.relato, ''))) > 0
       and (p.done_at at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      and p.done_at >= cfg.ts0
       -- só partes que existem na aula (a1-p1 ... a1-pN, com N vindo de p_praticas)
       and substring(p.task_id from '-p([0-9]+)$')::int <= coalesce((p_praticas ->> p.aula::text)::int, 0)
   ),
@@ -110,6 +116,7 @@ as $$
     from public.academy_quiz_attempts q cross join cfg
     where q.curso = p_curso and q.respostas ->> '_versao' = p_versao::text
       and (q.created_at at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      and q.created_at >= cfg.ts0
     order by q.user_id, q.aula, q.tipo, q.nota desc, q.created_at
   ),
   ev_prova as (
@@ -146,6 +153,7 @@ as $$
     select a.user_id, (a.quando at time zone 'America/Sao_Paulo')::date as dia, 'aula'::text as tipo, cfg.r_aula as xp
     from aprovadas a cross join cfg
     where (a.quando at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      and a.quando >= cfg.ts0
   ),
   eventos as (
     select * from ev_rev

@@ -9,6 +9,7 @@
 --   dias = dias diferentes com pomodoro ou revisão;
 --   dispersão (só pomodoros de estudo): tempo fora da plataforma, saídas e pomodoros com
 --   p_limite_fora segundos ou mais fora (pomodoros dispersos).
+-- O ranking de foco só conta o que foi feito depois do início da competição (supabase/inicio.sql).
 -- A mesma conta é feita no app (estudoNoPeriodo, em js/app.js) para o relatório pessoal.
 drop function if exists public.academy_foco(timestamptz, timestamptz);
 drop function if exists public.academy_foco(timestamptz, timestamptz, int);
@@ -22,7 +23,7 @@ as $$
   pom as (
     select p.user_id, p.minutos, p.concluido_em, p.tipo, p.fora_segundos, p.saidas
     from public.academy_pomodoros p
-    where p.concluido_em >= p_inicio and p.concluido_em < p_fim
+    where p.concluido_em >= greatest(p_inicio, public.academy_inicio_contagem()) and p.concluido_em < p_fim
   ),
   pom_soma as (
     select p.user_id, count(*)::int as n, sum(p.minutos)::int as m,
@@ -37,7 +38,7 @@ as $$
     select l.user_id, l.reviewed_at,
       l.reviewed_at - lag(l.reviewed_at) over (partition by l.user_id order by l.reviewed_at) as gap
     from public.academy_review_log l
-    where l.reviewed_at >= p_inicio and l.reviewed_at < p_fim
+    where l.reviewed_at >= greatest(p_inicio, public.academy_inicio_contagem()) and l.reviewed_at < p_fim
   ),
   rev_t as (
     select r.user_id, r.reviewed_at,

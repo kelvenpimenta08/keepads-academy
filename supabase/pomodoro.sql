@@ -68,9 +68,11 @@ create or replace function public.academy_ranking(p_curso text, p_versao int, p_
 returns table (user_id uuid, nome text, provas_feitas int, media numeric, ofensiva int)
 language sql stable security definer set search_path = public
 as $$
+  -- Só conta o que foi feito depois do início da competição (supabase/inicio.sql)
   with revisoes as (
     select l.user_id, (l.reviewed_at at time zone 'America/Sao_Paulo')::date as dia
     from public.academy_review_log l
+    where l.reviewed_at >= public.academy_inicio_contagem()
     group by 1, 2
     having count(*) >= p_meta
   ),
@@ -79,7 +81,7 @@ as $$
   focos as (
     select distinct p.user_id, (p.concluido_em at time zone 'America/Sao_Paulo')::date as dia
     from public.academy_pomodoros p
-    where p.tipo = 'execucao' or p.fora_segundos < 300
+    where (p.tipo = 'execucao' or p.fora_segundos < 300) and p.concluido_em >= public.academy_inicio_contagem()
   ),
   dias as (
     select r.user_id, r.dia from revisoes r join focos f on f.user_id = r.user_id and f.dia = r.dia
@@ -101,12 +103,15 @@ as $$
     select q.user_id, q.aula, q.tipo, max(q.nota) as nota
     from public.academy_quiz_attempts q
     where q.curso = p_curso and q.respostas ->> '_versao' = p_versao::text
+      and q.created_at >= public.academy_inicio_contagem()
     group by q.user_id, q.aula, q.tipo
   ),
   participantes as (
-    select distinct l.user_id from public.academy_review_log l where l.curso = p_curso
+    select distinct l.user_id from public.academy_review_log l
+    where l.curso = p_curso and l.reviewed_at >= public.academy_inicio_contagem()
     union
-    select distinct q.user_id from public.academy_quiz_attempts q where q.curso = p_curso
+    select distinct q.user_id from public.academy_quiz_attempts q
+    where q.curso = p_curso and q.created_at >= public.academy_inicio_contagem()
   )
   select p.id, p.nome, count(pr.nota)::int, round(avg(pr.nota), 1), coalesce(max(a.ofensiva), 0)::int
   from participantes pa
