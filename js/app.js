@@ -708,6 +708,11 @@
       '<div class="hero-stats"><div><b>' + aprovadas + "/" + CURSO.aulas.length + "</b><span>aulas aprovadas</span></div>" +
       "<div><b>🔥 " + calcularOfensiva().dias + "</b><span>dias de ofensiva</span></div>" +
       "<div><b>" + CURSO.notaMinima + "</b><span>nota mínima</span></div></div></section>" +
+      (CURSO.linkAulas
+        ? '<section class="painel acesso-aulas"><div class="acesso-texto"><h2>🎬 Plataforma para assistir a mentoria</h2>' +
+          '<p class="muted">As aulas gravadas ficam aqui.</p></div>' +
+          '<a class="btn btn-primario" href="' + esc(CURSO.linkAulas) + '" target="_blank" rel="noopener">Assistir as aulas ↗</a></section>'
+        : "") +
       (semAulas
         ? '<section class="painel centro vazio"><h2>Conteúdo em preparação</h2><p class="muted">' + esc(CURSO.descricao) +
           "</p><p>Assim que a primeira aula for liberada, os flashcards, as partes práticas e as provas aparecem aqui.</p></section>"
