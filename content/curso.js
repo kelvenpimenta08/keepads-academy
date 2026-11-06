@@ -41,6 +41,8 @@
       titulo: "Agentes de IA para Tráfego Pago",
       mentor: "Adriano Gianini",
       descricao: "Construção da Freedom: uma agência de marketing automatizada com IA, do caderno de desabafos às integrações.",
+      // Onde assistir as aulas gravadas (card no topo da tela da mentoria)
+      linkAulas: "https://alunos.adrianogianini.com.br/m/course",
       imagem: "",           // opcional: caminho de uma imagem de capa (ex.: "img/capa-adriano.jpg")
       // Versão das provas: tentativas feitas em versões anteriores (mais fáceis) não contam na nota
       versaoProvas: 2,
@@ -59,6 +61,7 @@
       titulo: "Growth Commerce AI",
       mentor: "Di Santana",
       descricao: "Consultoria de growth para e-commerce em grupo: leitura estratégica, métodos, ferramentas e prompts de IA para cada aula virar uma decisão aplicada na semana.",
+      linkAulas: "https://drive.google.com/drive/folders/1X6ekxWDLkZGTgIvD1XPAYIRN0oPNTzhQ",
       imagem: "",
       versaoProvas: 1,
       prefixoArquivos: "ds-",   // arquivos desta mentoria: content/ds-aula-NN.js e audio/resumos/ds-aula-NN-hora-H.mp3
