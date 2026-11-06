@@ -255,6 +255,17 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .travas-contagem { display: flex; flex-wrap: wrap; gap: .4rem; }
 .painel-travas { margin-top: 1.5rem; }
 
+/* Plataforma para assistir a mentoria (tela da mentoria) */
+.painel.acesso-aulas { display: flex; align-items: center; gap: 1.2rem 1.6rem; flex-wrap: wrap; margin-bottom: 1.5rem; border-left: 4px solid var(--verde); }
+.painel.acesso-aulas > * + * { margin-top: 0; }
+.acesso-texto { flex: 1 1 16rem; }
+.acesso-texto h2 { font-size: 1.25rem; margin: 0 0 .2rem; }
+.acesso-texto p { margin: 0; }
+@media (max-width: 760px) {
+  .painel.acesso-aulas { flex-direction: column; align-items: stretch; }
+  .painel.acesso-aulas > .btn-primario { width: 100%; }
+}
+
 /* Relatório de estudo */
 .relatorio-topo { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .relatorio-topo h1 { margin: 0; }
