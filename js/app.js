@@ -381,6 +381,7 @@
           (S.perfil && S.perfil.is_admin ? item(rota("equipe"), "👥", "Equipe") : "")
         : "") +
       item("#/relatorio", "📊", "Relatório") +
+      (S.perfil && S.perfil.is_admin ? item("#/acessos", "🕒", "Acessos") : "") +
       item("#/como-funciona", "💡", "Como funciona") +
       item("#/perfil", "👤", "Meu perfil", "menu-so-celular") +
       "</nav>" +
@@ -2091,6 +2092,162 @@
 
   // ---------- equipe (admin) ----------
 
+  // ---------- acessos da equipe (só administrador) ----------
+  // Quem entrou, em que dia e em que horário. As sessões vêm do banco (supabase/acessos.sql):
+  // aberturas do app + tudo o que a pessoa fez, agrupado quando o intervalo é de até 40 minutos.
+
+  const FMT_HORA = (function () {
+    try { return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }); }
+    catch (e) { return null; }
+  })();
+  function horaBR(d) {
+    const x = new Date(d);
+    return FMT_HORA ? FMT_HORA.format(x) : dois(x.getHours()) + ":" + dois(x.getMinutes());
+  }
+  const SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  // "2026-11-09" -> "seg 09/11"
+  function nomeDia(iso) {
+    const p = iso.split("-").map(Number), d = new Date(p[0], p[1] - 1, p[2]);
+    return SEMANA[d.getDay()] + " " + dois(p[2]) + "/" + dois(p[1]);
+  }
+  function diaMenos(iso, n) {
+    const p = iso.split("-").map(Number), d = new Date(p[0], p[1] - 1, p[2] - n);
+    return d.getFullYear() + "-" + dois(d.getMonth() + 1) + "-" + dois(d.getDate());
+  }
+  const ICONE_APARELHO = { celular: "📱", computador: "💻", app: "📲" };
+
+  // Anota que a pessoa abriu o Academy (no máximo 1 a cada 10 minutos; o banco também limita)
+  function registrarAcesso() {
+    if (!sb || !S.session || !S.perfil) return;
+    const agora = Date.now();
+    if (S.ultimoAcesso && agora - S.ultimoAcesso < 10 * 60000) return;
+    S.ultimoAcesso = agora;
+    const instalado = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone;
+    const disp = instalado ? "app" : /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? "celular" : "computador";
+    sb.rpc("academy_registrar_acesso", { p_dispositivo: disp }).then(function () {}, function () {});
+  }
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") registrarAcesso(); });
+
+  function oQueFez(s) {
+    const itens = [];
+    if (s.cards) itens.push(s.cards + (s.cards === 1 ? " card" : " cards"));
+    if (s.pomodoros) itens.push(s.pomodoros + " 🍅");
+    if (s.praticas) itens.push(s.praticas + (s.praticas === 1 ? " prática" : " práticas"));
+    if (s.provas) itens.push(s.provas + (s.provas === 1 ? " prova" : " provas"));
+    if (s.simulados) itens.push(s.simulados + (s.simulados === 1 ? " simulado" : " simulados"));
+    return itens.length ? itens.join(" · ") : "só abriu o app";
+  }
+  function janela(s) {
+    const a = horaBR(s.inicio), b = horaBR(s.fim);
+    return a === b ? a : a + "–" + b;
+  }
+
+  async function telaAcessos(param) {
+    if (!S.perfil || !S.perfil.is_admin) { location.hash = "#/"; return; }
+    const N = [7, 14, 30].indexOf(Number(param)) >= 0 ? Number(param) : 7;
+    layout('<div class="painel centro"><p>Carregando os acessos…</p></div>');
+    const tela = location.hash;
+    const hoje = diaLocal(new Date());
+    const primeiro = diaMenos(hoje, N - 1);
+    const res = await Promise.all([
+      todas(function () { return sb.from(T.perfis).select("id,nome,is_admin").order("nome"); }),
+      sb.rpc("academy_sessoes_equipe", { p_inicio: primeiro + "T00:00:00-03:00", p_fim: new Date(Date.now() + 60000).toISOString() }),
+      sb.rpc("academy_ultimo_uso")
+    ]);
+    if (location.hash !== tela) return;
+    const falhou = res.find(function (r) { return r.error; });
+    if (falhou) {
+      layout('<div class="painel"><h1>🕒 Acessos</h1><p class="erro">' + esc(traduzErro(falhou.error)) + "</p>" +
+        '<p class="muted pequeno">Se for a primeira vez, falta rodar o supabase/acessos.sql no Supabase.</p></div>');
+      return;
+    }
+    const pessoas = res[0].data || [];
+    const ultimo = {};
+    (res[2].data || []).forEach(function (u) { ultimo[u.user_id] = u.ultimo; });
+    const sessoes = (res[1].data || []).map(function (s) { return Object.assign({}, s, { dia: diaLocal(s.inicio) }); });
+    const doDia = function (uid, dia) { return sessoes.filter(function (s) { return s.user_id === uid && s.dia === dia; }); };
+    const nomeDe = function (uid) { const p = pessoas.find(function (x) { return x.id === uid; }); return p ? (p.nome || "Sem nome") : "?"; };
+    const curto = function (nome) { const p = String(nome || "Sem nome").split(" "); return p[0] + (p[1] ? " " + p[1][0] + "." : ""); };
+    const aparelho = function (s) { return s.dispositivo ? '<span title="' + esc(s.dispositivo) + '">' + (ICONE_APARELHO[s.dispositivo] || "") + "</span> " : ""; };
+
+    // 1) Hoje: quem entrou (em ordem de horário) e quem não entrou (desde quando)
+    const linhasHoje = pessoas.map(function (p) {
+      const ss = doDia(p.id, hoje);
+      return { p: p, ss: ss, primeira: ss.length ? Date.parse(ss[0].inicio) : null, ultimo: ultimo[p.id] ? Date.parse(ultimo[p.id]) : null };
+    }).sort(function (a, b) {
+      if (a.primeira && b.primeira) return a.primeira - b.primeira;
+      if (a.primeira || b.primeira) return a.primeira ? -1 : 1;
+      return (b.ultimo || 0) - (a.ultimo || 0);
+    });
+    const entraram = linhasHoje.filter(function (l) { return l.ss.length; }).length;
+    const blocoHoje = '<section class="painel"><h2>Hoje · ' + nomeDia(hoje) + "</h2>" +
+      '<p class="muted">' + entraram + " de " + pessoas.length + " pessoas entraram hoje.</p>" +
+      '<ul class="acessos-hoje">' + linhasHoje.map(function (l) {
+        if (l.ss.length) {
+          return '<li class="entrou"><div class="ah-nome"><b>' + esc(l.p.nome || "Sem nome") + '</b><span class="chip chip-ok">entrou às ' + horaBR(l.ss[0].inicio) + "</span></div>" +
+            '<div class="ah-sessoes">' + l.ss.map(function (s) {
+              return "<div>" + aparelho(s) + "<b>" + janela(s) + '</b> <span class="muted">' + esc(oQueFez(s)) + "</span></div>";
+            }).join("") + "</div></li>";
+        }
+        let quando = "nunca usou o sistema";
+        if (l.ultimo) {
+          const dia = diaLocal(l.ultimo), dias = Math.round((dataLocal(hoje) - dataLocal(dia)) / DIA);
+          quando = "última vez: " + nomeDia(dia) + " às " + horaBR(l.ultimo) + " (" + (dias === 1 ? "ontem" : "há " + dias + " dias") + ")";
+        }
+        return '<li class="nao-entrou"><div class="ah-nome"><b>' + esc(l.p.nome || "Sem nome") + '</b><span class="chip chip-cinza">não entrou hoje</span></div>' +
+          '<div class="ah-sessoes muted">' + quando + "</div></li>";
+      }).join("") + "</ul></section>";
+
+    // 2) Dia a dia: primeira entrada de cada pessoa em cada dia do período (hoje primeiro,
+    // para o celular mostrar os dias mais recentes sem precisar rolar)
+    const dias = [];
+    for (let i = 0; i < N; i++) dias.push(diaMenos(hoje, i));
+    const grade = '<section class="painel"><h2>Dia a dia</h2>' +
+      '<p class="muted pequeno">Horário da primeira entrada no dia. "+1" = voltou mais vezes no mesmo dia (todos os horários estão na linha do tempo abaixo).</p>' +
+      '<div class="tabela-rolagem"><table class="tabela grade-acessos"><thead><tr><th>Pessoa</th>' +
+      dias.map(function (d) { return "<th" + (d === hoje ? ' class="hoje"' : "") + ">" + nomeDia(d).replace(" ", "<br>") + "</th>"; }).join("") +
+      "<th>Dias</th></tr></thead><tbody>" +
+      pessoas.map(function (p) {
+        let ativos = 0;
+        const cels = dias.map(function (d) {
+          const ss = doDia(p.id, d);
+          if (!ss.length) return '<td class="vazio' + (d === hoje ? " hoje" : "") + '">·</td>';
+          ativos++;
+          const lista = ss.map(function (s) { return janela(s) + " (" + oQueFez(s) + ")"; }).join("\n");
+          return '<td class="ativo' + (d === hoje ? " hoje" : "") + '" title="' + esc(lista) + '"><b>' + horaBR(ss[0].inicio) + "</b>" +
+            (ss.length > 1 ? "<small>+" + (ss.length - 1) + "</small>" : "") + "</td>";
+        }).join("");
+        return "<tr><td><b>" + esc(curto(p.nome)) + "</b></td>" + cels + "<td><b>" + ativos + "</b>/" + N + "</td></tr>";
+      }).join("") + "</tbody></table></div></section>";
+
+    // 3) Linha do tempo: cada dia, quem entrou, de que horas a que horas e o que fez
+    const linha = '<section class="painel"><h2>Linha do tempo</h2>' + dias.map(function (d, i) {
+      const ss = sessoes.filter(function (s) { return s.dia === d; });
+      const gente = {};
+      ss.forEach(function (s) { gente[s.user_id] = true; });
+      return '<details class="acessos-dia"' + (i < 2 ? " open" : "") + "><summary><b>" + (d === hoje ? "Hoje · " : "") + nomeDia(d) + '</b><span class="muted">' +
+        (ss.length ? Object.keys(gente).length + (Object.keys(gente).length === 1 ? " pessoa" : " pessoas") : "ninguém entrou") + "</span></summary>" +
+        (ss.length ? '<ul class="acessos-lista">' + ss.map(function (s) {
+          return "<li><span class=\"al-hora\">" + janela(s) + "</span><span><b>" + esc(nomeDe(s.user_id)) + "</b> " + aparelho(s) +
+            '<span class="muted">' + esc(oQueFez(s)) + "</span></span></li>";
+        }).join("") + "</ul>" : "") + "</details>";
+    }).join("") + "</section>";
+
+    const filtros = '<div class="filtro-periodo">' + [7, 14, 30].map(function (n) {
+      return '<a class="chip' + (n === N ? " chip-ok" : " chip-cinza") + '" href="#/acessos/' + n + '">' + n + " dias</a>";
+    }).join("") + "</div>";
+
+    layout(
+      '<a href="#/" class="voltar">← Voltar</a>' +
+      "<h1>🕒 Acessos da equipe</h1>" +
+      '<p class="muted">Quem entrou no Academy, em que dia e em que horário. Só administradores veem esta tela.</p>' +
+      filtros + blocoHoje + grade + linha +
+      '<p class="muted pequeno">O horário vem de quando a pessoa abre o Academy e de tudo o que ela faz (flashcards, pomodoros, práticas, provas e simulados). ' +
+      "Atividades com até 40 minutos de intervalo contam como uma mesma sessão. 📱 celular · 💻 computador · 📲 app instalado. " +
+      "A abertura do app sem nenhuma atividade passou a ser registrada a partir desta versão.</p>"
+    );
+  }
+
   async function telaEquipe() {
     if (!S.perfil || !S.perfil.is_admin) { location.hash = "#/"; return; }
     layout('<div class="painel centro"><p>Carregando a equipe…</p></div>');
@@ -2151,6 +2308,7 @@
       '<a href="' + rota("") + '" class="voltar">← Voltar para as aulas</a>' +
       "<h1>Equipe</h1><p class=\"muted\">" + esc(CURSO.tipo + " " + CURSO.titulo + " · " + CURSO.mentor) +
       ". Todo mundo que criou conta: " + linhas.length + " pessoa(s).</p>" +
+      '<p><a class="btn btn-secundario" href="#/acessos">🕒 Ver dia e horário de acesso de cada pessoa</a></p>' +
       (disponiveis.length ? "" : '<p class="aviso">Esta mentoria ainda não tem aulas liberadas.</p>') +
       '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th><th>Ofensiva</th><th>Últimos 7 dias</th><th>Foco livre (7 dias)</th><th>Última atividade</th>' + cab +
       "<th>Aprovadas</th></tr></thead><tbody>" + corpo + "</tbody></table></div>" +
@@ -3197,6 +3355,7 @@
         await carregarDados();
         pomoEnviarPendentes();
       }
+      registrarAcesso();
       const partes = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
       S.noCurso = partes[0] === "c";
       if (S.noCurso) {
@@ -3218,6 +3377,7 @@
         case "temporada": return await telaTemporada();
         case "relatorio": return await telaRelatorio(partes[1]);
         case "perfil": return telaPerfil();
+        case "acessos": return await telaAcessos(partes[1]);
         default: location.hash = "#/";
       }
     } catch (e) {
