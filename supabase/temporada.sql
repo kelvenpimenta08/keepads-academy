@@ -10,6 +10,8 @@ alter table public.academy_practice_checks add column if not exists relato text;
 -- Os pontos vêm do app (TEMPORADA_PONTOS em content/curso.js) em p_regras, e
 -- p_praticas traz quantas partes práticas cada aula tem, ex.: {"1": 9, "2": 9}.
 -- Todos os perfis aparecem no placar, mesmo quem ainda não pontuou.
+-- (drop antes do create porque as colunas do resultado mudaram: entrou o bônus do simulado)
+drop function if exists public.academy_temporada(text, date, date, int, jsonb, jsonb);
 create or replace function public.academy_temporada(
   p_curso text, p_inicio date, p_fim date, p_versao int, p_regras jsonb, p_praticas jsonb)
 returns table (
@@ -18,7 +20,8 @@ returns table (
   xp_revisao numeric, xp_meta numeric, xp_ofensiva numeric, xp_dominados numeric,
   xp_praticas numeric, xp_provas numeric, xp_aulas numeric,
   revisoes int, dias_meta int, ofensiva_max int, dominados int, praticas int,
-  provas_feitas int, media_provas numeric, max_nota numeric, aulas_aprovadas int)
+  provas_feitas int, media_provas numeric, max_nota numeric, aulas_aprovadas int,
+  xp_simulados numeric, simulados int)
 language sql stable security definer set search_path = public
 as $$
   with
@@ -37,6 +40,8 @@ as $$
       coalesce((p_regras ->> 'pratica')::numeric, 15) as r_prat,
       coalesce((p_regras ->> 'prova')::numeric, 2) as r_prova,
       coalesce((p_regras ->> 'aula')::numeric, 50) as r_aula,
+      coalesce((p_regras -> 'simulado' ->> 'xp')::numeric, 10) as r_sim,
+      coalesce((p_regras -> 'simulado' ->> 'dias')::int, 3) as r_sim_dias,
       coalesce((p_regras ->> 'notaMinima')::numeric, 70) as r_min,
       coalesce((p_regras -> 'pesos' ->> 'teorica')::numeric, 0.4) as w_t,
       coalesce((p_regras -> 'pesos' ->> 'pratica')::numeric, 0.4) as w_p,
@@ -156,6 +161,32 @@ as $$
     where (a.quando at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
       and a.quando >= cfg.ts0
   ),
+  -- Simulado (supabase/simulado.sql): bônus uma vez por aula, no dia em que a pessoa
+  -- completa simulados em r_sim_dias dias diferentes dentro da temporada
+  sim_dias as (
+    select distinct s.user_id, s.aula, (s.created_at at time zone 'America/Sao_Paulo')::date as dia
+    from public.academy_simulados s cross join cfg
+    where s.curso = p_curso
+      and (s.created_at at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      and s.created_at >= cfg.ts0
+  ),
+  sim_pos as (
+    select sd.user_id, sd.aula, sd.dia, row_number() over (partition by sd.user_id, sd.aula order by sd.dia)::int as pos
+    from sim_dias sd
+  ),
+  ev_sim as (
+    select sp.user_id, sp.dia, 'simulado'::text as tipo, cfg.r_sim as xp
+    from sim_pos sp cross join cfg
+    where sp.pos = cfg.r_sim_dias
+  ),
+  sim_total as (
+    select s.user_id, count(*)::int as n
+    from public.academy_simulados s cross join cfg
+    where s.curso = p_curso
+      and (s.created_at at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      and s.created_at >= cfg.ts0
+    group by s.user_id
+  ),
   eventos as (
     select * from ev_rev
     union all select * from ev_meta
@@ -164,6 +195,7 @@ as $$
     union all select * from ev_prat
     union all select * from ev_prova
     union all select * from ev_aula
+    union all select * from ev_sim
   ),
   soma as (
     select e.user_id,
@@ -177,6 +209,7 @@ as $$
       coalesce(sum(e.xp) filter (where e.tipo = 'pratica'), 0) as x_prat,
       coalesce(sum(e.xp) filter (where e.tipo = 'prova'), 0) as x_prova,
       coalesce(sum(e.xp) filter (where e.tipo = 'aula'), 0) as x_aula,
+      coalesce(sum(e.xp) filter (where e.tipo = 'simulado'), 0) as x_sim,
       (count(*) filter (where e.tipo = 'meta'))::int as n_meta,
       (count(*) filter (where e.tipo = 'dominado'))::int as n_dom,
       (count(*) filter (where e.tipo = 'pratica'))::int as n_prat,
@@ -196,8 +229,10 @@ as $$
     round(coalesce(s.x_rev, 0)), coalesce(s.x_meta, 0), coalesce(s.x_of, 0), coalesce(s.x_dom, 0),
     coalesce(s.x_prat, 0), round(coalesce(s.x_prova, 0)), coalesce(s.x_aula, 0),
     coalesce(r.n, 0), coalesce(s.n_meta, 0), coalesce(o.dias, 0), coalesce(s.n_dom, 0), coalesce(s.n_prat, 0),
-    coalesce(pv.n, 0), pv.media, pv.maxima, coalesce(s.n_aula, 0)
+    coalesce(pv.n, 0), pv.media, pv.maxima, coalesce(s.n_aula, 0),
+    coalesce(s.x_sim, 0), coalesce(st.n, 0)
   from public.academy_profiles pr
+  left join sim_total st on st.user_id = pr.id
   left join soma s on s.user_id = pr.id
   left join revs r on r.user_id = pr.id
   left join ofensiva_max o on o.user_id = pr.id
