@@ -876,3 +876,16 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
   .fc-texto { font-size: 1.08rem; }
   .fc-divisor { margin: 1rem 0; }
 }
+
+/* Simulado: preparo para a prova e bônus de XP */
+.simu-preparo { display: flex; flex-direction: column; gap: .15rem; border-radius: 10px; padding: .7rem 1rem; margin: .8rem 0; text-align: left; border: 1px solid var(--borda); }
+.simu-preparo b { font-size: .98rem; }
+.simu-preparo span { font-size: .85rem; color: var(--muted); }
+.simu-preparo.ok { background: var(--verde-claro); border-color: transparent; }
+.simu-preparo.ok b { color: var(--verde-escuro); }
+.simu-preparo.quase { background: var(--aviso-claro); border-color: transparent; }
+.simu-preparo.quase b { color: var(--aviso); }
+.simu-preparo.baixo { background: var(--erro-claro); border-color: transparent; }
+.simu-preparo.baixo b { color: var(--erro); }
+.simu-bonus { margin: .8rem 0; text-align: left; font-size: .88rem; }
+.simu-bonus p { margin: .4rem 0 0; }
