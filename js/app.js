@@ -25,7 +25,8 @@
     praticas: "academy_practice_checks",
     provas: "academy_quiz_attempts",
     pomodoros: "academy_pomodoros",
-    travas: "academy_travas"
+    travas: "academy_travas",
+    simulados: "academy_simulados"
   };
 
   // Estado da sessão no navegador
@@ -168,10 +169,13 @@
       todas(function () { return sb.from(T.provas).select("curso,aula,tipo,nota,acertos,total,created_at,versao:respostas->_versao").eq("user_id", uid).order("created_at", { ascending: false }); }),
       todas(function () { return sb.from(T.log).select("curso,aula,reviewed_at").eq("user_id", uid).order("id"); }),
       todas(function () { return sb.from(T.pomodoros).select("minutos,iniciado_em,concluido_em,tipo,fora_segundos,saidas,rotulo").eq("user_id", uid).order("id"); }),
-      sb.from(T.travas).select("*").eq("user_id", uid).order("created_at", { ascending: false })
+      sb.from(T.travas).select("*").eq("user_id", uid).order("created_at", { ascending: false }),
+      // Simulado: se a tabela ainda não existir no banco, o resto do app continua funcionando
+      todas(function () { return sb.from(T.simulados).select("curso,aula,acertos,total,nota,created_at").eq("user_id", uid).order("created_at", { ascending: false }); })
+        .then(function (r) { return r.error ? { data: [] } : r; }, function () { return { data: [] }; })
     ]);
     res.forEach(function (r) { if (r.error) throw r.error; });
-    S.bruto = { cards: res[0].data, checks: res[1].data, provas: res[2].data, log: res[3].data, pomodoros: res[4].data, travas: res[5].data };
+    S.bruto = { cards: res[0].data, checks: res[1].data, provas: res[2].data, log: res[3].data, pomodoros: res[4].data, travas: res[5].data, simulados: res[6].data || [] };
     S.porCurso = {};
     S.dados = CURSO ? dadosDoCurso(CURSO) : null;
   }
@@ -184,10 +188,12 @@
   function dadosDoCurso(c) {
     if (!S.porCurso[c.id]) {
       S.porCurso[c.id] = comCurso(c, function () {
-        return montarDados(
+        const d = montarDados(
           S.bruto.cards.filter(doCurso(c)), S.bruto.checks.filter(doCurso(c)),
           S.bruto.provas.filter(doCurso(c)), S.bruto.log.filter(doCurso(c))
         );
+        d.simulados = (S.bruto.simulados || []).filter(doCurso(c));
+        return d;
       });
     }
     return S.porCurso[c.id];
@@ -206,7 +212,7 @@
     if (CURSO !== c) {
       CURSO = c;
       AULAS = TODAS_AULAS[c.id] || {};
-      S.revisao = null; S.prova = null; S.provaAdmin = null;
+      S.revisao = null; S.prova = null; S.provaAdmin = null; S.simu = null;
     }
     S.dados = dadosDoCurso(c);
     try { localStorage.setItem("academy-ultimo-curso", c.id); } catch (e) {}
@@ -734,6 +740,7 @@
     ["mapa", "Mapa mental"],
     ["revisao", "Revisão"],
     ["pratica", "Partes práticas"],
+    ["simulado", "Simulado"],
     ["teorica", "Prova teórica"],
     ["prova-pratica", "Prova prática"],
     ["nota", "Nota"]
@@ -744,6 +751,7 @@
     return ABAS.filter(function (x) {
       if (x[0] === "resumo") return !!(aula.fases && aula.fases.length);
       if (x[0] === "mapa") return !!(aula.mapa && aula.mapa.ramos);
+      if (x[0] === "simulado") return !!(aula.simulado && aula.simulado.length);
       return true;
     });
   }
@@ -755,6 +763,7 @@
     if (S.revisao && (S.revisao.aula !== n || aba !== "revisao")) S.revisao = null;
     const tipoProva = aba === "teorica" ? "teorica" : aba === "prova-pratica" ? "pratica" : null;
     if (S.prova && (S.prova.aula !== n || S.prova.tipo !== tipoProva)) S.prova = null;
+    if (S.simu && (S.simu.aula !== n || aba !== "simulado")) S.simu = null;
 
     const r = resumoAula(n, S.dados);
     const abas = abasDaAula(aula).map(function (x) {
@@ -765,6 +774,7 @@
     if (aba === "resumo" && aula.fases) corpo = corpoResumo(n, aula);
     else if (aba === "mapa" && aula.mapa) corpo = corpoMapa(n, aula);
     else if (aba === "pratica") corpo = corpoPratica(n, aula, r);
+    else if (aba === "simulado" && aula.simulado) corpo = corpoSimulado(n, aula, r);
     else if (aba === "teorica") corpo = corpoProva(n, "teorica", r);
     else if (aba === "prova-pratica") corpo = corpoProva(n, "pratica", r);
     else if (aba === "nota") corpo = corpoNota(n, r);
@@ -789,6 +799,7 @@
     else if (aba === "mapa") ligarMapa();
     else if (aba === "resumo") ligarResumo(n);
     else if (aba === "pratica") ligarPratica(n);
+    else if (aba === "simulado") ligarSimulado(n);
     else if (aba === "teorica") ligarProva(n, "teorica");
     else if (aba === "prova-pratica") ligarProva(n, "pratica");
   }
@@ -1320,7 +1331,11 @@
       (tentativas.length
         ? '<p class="muted">Melhor nota até agora: <b>' + Math.round(melhor) + "</b> · Tentativas: " + tentativas.length + "</p>"
         : "") +
-      '<button class="btn btn-primario" id="pv-iniciar">Começar prova</button></div>';
+      (tipo === "teorica" && AULAS[n].simulado && AULAS[n].simulado.length
+        ? (blocoPreparo(n) || '<p class="muted">Ainda não fez o simulado? Ele treina você com questões no mesmo nível, sem gastar a sua tentativa.</p>') +
+          '<div class="linha-botoes"><a class="btn btn-secundario" href="' + rota("aula/" + n) + '/simulado">Treinar no simulado</a>' +
+          '<button class="btn btn-primario" id="pv-iniciar">Começar prova</button></div></div>'
+        : '<button class="btn btn-primario" id="pv-iniciar">Começar prova</button></div>');
   }
 
   function iniciarProva(n, tipo) {
@@ -1366,6 +1381,165 @@
       S.dados.provas.unshift(r.data);
       p.resultado = { acertos: acertos, total: p.questoes.length, nota: nota };
       telaAula(n, aba);
+      window.scrollTo(0, 0);
+    };
+  }
+
+  // ----- simulado (treino para a prova teórica) -----
+  // Perguntas próprias (content/simulados/), diferentes das da prova. Pode refazer à vontade.
+  // A nota não entra na aula nem no ranking; o XP é um bônus único por aula (supabase/temporada.sql).
+
+  const SIMU_QUESTOES = 10;   // questões sorteadas do banco do simulado a cada tentativa
+
+  function simuladosDa(n) {
+    return ((S.dados && S.dados.simulados) || []).filter(function (s) { return s.aula === n; });
+  }
+
+  // Quanto a pessoa está pronta para a prova, pela média dos últimos 3 simulados
+  function preparoSimulado(n) {
+    const lista = simuladosDa(n);
+    if (!lista.length) return null;
+    const ult = lista.slice(0, 3);
+    const media = Math.round(ult.reduce(function (s, x) { return s + Number(x.nota); }, 0) / ult.length);
+    const nivel = ult.length >= 2 && media >= 80 ? { cls: "ok", txt: "✅ Pronto para a prova" }
+      : media >= CURSO.notaMinima ? { cls: "quase", txt: "🟡 Quase lá" }
+      : { cls: "baixo", txt: "🔴 Continue treinando" };
+    return { ultimos: ult, media: media, nivel: nivel, total: lista.length };
+  }
+
+  // Progresso do bônus de XP: dias diferentes com simulado desta aula, dentro da temporada da mentoria
+  function bonusSimulado(n) {
+    const P = PONTOS.simulado;
+    const t = temporadaAtual();
+    if (!P || !t || t.curso !== CURSO.id || situacaoTemporada(t).fase !== "andamento") return null;
+    const desde = Math.max(dataLocal(t.inicio).getTime(), REGRAS.inicioContagem ? Date.parse(REGRAS.inicioContagem) : 0);
+    const dias = {};
+    simuladosDa(n).forEach(function (s) { if (new Date(s.created_at).getTime() >= desde) dias[diaLocal(s.created_at)] = true; });
+    const feitos = Object.keys(dias).length;
+    return { feitos: Math.min(feitos, P.dias), meta: P.dias, xp: P.xp, ganhou: feitos >= P.dias, hoje: !!dias[diaLocal(new Date())] };
+  }
+
+  function blocoBonusSimulado(n) {
+    const b = bonusSimulado(n);
+    if (!b) return "";
+    const txt = b.ganhou ? "✅ Você já ganhou os <b>+" + b.xp + " XP</b> do simulado desta aula."
+      : "Simulado feito em <b>" + b.feitos + " de " + b.meta + "</b> dias diferentes. Ao completar " + b.meta + ", ganha <b>+" + b.xp + " XP</b> (uma vez por aula)." +
+        (b.hoje ? " Hoje já contou: volte amanhã para somar mais um dia." : "");
+    return '<div class="simu-bonus">' + barra(b.feitos / b.meta * 100) + "<p>" + txt + "</p></div>";
+  }
+
+  function blocoPreparo(n) {
+    const p = preparoSimulado(n);
+    if (!p) return "";
+    return '<div class="simu-preparo ' + p.nivel.cls + '"><b>' + p.nivel.txt + "</b>" +
+      "<span>Últimos simulados: " + p.ultimos.map(function (x) { return Math.round(x.nota) + "%"; }).join(", ") + " · média " + p.media + "%</span></div>";
+  }
+
+  function corpoSimulado(n, aula, r) {
+    const lib = liberacaoProva(n, S.dados, r);
+    const liberadaAdmin = S.provaAdmin === n && S.perfil && S.perfil.is_admin;
+    const s = S.simu;
+    if (!lib.ok && !liberadaAdmin && !s) {
+      const itens = lib.itens.map(function (i) {
+        return '<li class="' + (i.feito ? "feito" : "") + '"><span class="req-icone">' + (i.feito ? "✓" : "○") + "</span>" +
+          "<div><b>" + esc(i.texto) + '</b><span class="muted pequeno">' + esc(i.progresso) + "</span></div></li>";
+      }).join("");
+      return '<div class="painel centro"><h2>Simulado bloqueado</h2>' +
+        "<p>O simulado libera junto com a prova teórica: depois de uma semana estudando os flashcards desta aula.</p>" +
+        '<ul class="requisitos">' + itens + "</ul>" +
+        (lib.liberaEm ? '<p class="muted">Se você revisar com frequência, libera a partir de <b>' + dataBR(lib.liberaEm) + "</b>.</p>" : "") +
+        '<div class="linha-botoes"><a class="btn btn-primario" href="' + rota("aula/" + n) + '/revisao">Ir para os flashcards</a></div>' +
+        (S.perfil && S.perfil.is_admin ? '<button class="link" id="pv-admin">Liberar só para mim agora (teste de administrador)</button>' : "") +
+        "</div>";
+    }
+    if (s && s.resultado) {
+      const lista = s.questoes.map(function (q, i) {
+        const marcada = s.respostas[q.id];
+        const acertou = marcada === q.correta;
+        return '<li class="corr ' + (acertou ? "certo" : "errado") + '"><div class="corr-q"><b>' + (i + 1) + ".</b> " + esc(q.pergunta) + "</div>" +
+          (acertou ? "" : '<div class="corr-sua">Sua resposta: ' + esc(q.opcoesOrig[marcada]) + "</div>") +
+          '<div class="corr-certa">Correta: ' + esc(q.opcoesOrig[q.correta]) + "</div>" +
+          '<div class="corr-exp">' + esc(q.explicacao) + "</div></li>";
+      }).join("");
+      const ok = s.resultado.nota >= CURSO.notaMinima;
+      return '<div class="painel"><div class="resultado ' + (ok ? "ok" : "baixo") + '"><b>' + Math.round(s.resultado.nota) + "</b><span>" +
+        s.resultado.acertos + " de " + s.resultado.total + " acertos no simulado</span><p>" +
+        (ok ? "Bom treino! Leia as explicações das que errou e, quando se sentir seguro, faça a prova."
+          : "Ainda abaixo de " + CURSO.notaMinima + ". Leia as explicações, revise os flashcards e faça outro simulado.") + "</p></div>" +
+        blocoBonusSimulado(n) + blocoPreparo(n) +
+        '<ol class="correcao">' + lista + "</ol>" +
+        '<div class="linha-botoes"><button class="btn btn-primario" id="sm-iniciar">Fazer outro simulado</button>' +
+        '<a class="btn btn-secundario" href="' + rota("aula/" + n) + '/teorica">Ir para a prova teórica</a></div></div>';
+    }
+    if (s) {
+      const respondidas = Object.keys(s.respostas).length;
+      const qs = s.questoes.map(function (q, i) {
+        const ops = q.ordem.map(function (oi) {
+          return '<label class="opcao"><input type="radio" name="' + q.id + '" value="' + oi + '"' + (s.respostas[q.id] === oi ? " checked" : "") + "><span>" + esc(q.opcoesOrig[oi]) + "</span></label>";
+        }).join("");
+        return '<li class="questao"><div class="questao-q"><b>' + (i + 1) + ".</b> " + esc(q.pergunta) + "</div>" + ops + "</li>";
+      }).join("");
+      return '<div class="painel"><h2>Simulado <span class="chip chip-cinza">treino</span></h2>' +
+        '<ol class="questoes">' + qs + "</ol>" +
+        '<div class="rodape-prova"><span id="sm-contagem">' + respondidas + " de " + s.questoes.length + ' respondidas</span>' +
+        '<button class="btn btn-primario" id="sm-enviar"' + (respondidas < s.questoes.length ? " disabled" : "") + ">Ver meu resultado</button></div></div>";
+    }
+    const feitos = simuladosDa(n);
+    const qtd = Math.min(SIMU_QUESTOES, aula.simulado.length);
+    return '<div class="painel centro"><h2>Simulado</h2>' +
+      "<p>Treino para a prova teórica: <b>" + qtd + " questões</b> no mesmo nível da prova, mas <b>diferentes</b> dela. A cada tentativa as questões e a ordem mudam.</p>" +
+      '<p class="aviso">Faça quantas vezes quiser. <b>A nota do simulado não entra na nota da aula nem no ranking</b>: é para você chegar seguro na prova.</p>' +
+      blocoPreparo(n) + blocoBonusSimulado(n) +
+      (feitos.length ? '<p class="muted pequeno">Você já fez ' + feitos.length + (feitos.length === 1 ? " simulado" : " simulados") + " desta aula. Último em " + dataBR(feitos[0].created_at) + ".</p>" : "") +
+      '<div class="linha-botoes"><button class="btn btn-primario" id="sm-iniciar">Começar simulado</button>' +
+      '<a class="btn btn-secundario" href="' + rota("aula/" + n) + '/teorica">Ver a prova teórica</a></div></div>';
+  }
+
+  function iniciarSimulado(n) {
+    const banco = AULAS[n].simulado;
+    S.simu = {
+      aula: n, respostas: {}, resultado: null,
+      questoes: embaralhar(banco).slice(0, Math.min(SIMU_QUESTOES, banco.length)).map(function (q) {
+        return {
+          id: q.id, pergunta: q.pergunta, explicacao: q.explicacao, correta: q.correta,
+          opcoesOrig: q.opcoes, ordem: embaralhar(q.opcoes.map(function (_, i) { return i; }))
+        };
+      })
+    };
+  }
+
+  function ligarSimulado(n) {
+    const ini = document.getElementById("sm-iniciar");
+    if (ini) ini.onclick = function () { iniciarSimulado(n); telaAula(n, "simulado"); window.scrollTo(0, 0); };
+    const adm = document.getElementById("pv-admin");
+    if (adm) adm.onclick = function () { S.provaAdmin = n; telaAula(n, "simulado"); };
+
+    document.querySelectorAll(".questoes input[type=radio]").forEach(function (rd) {
+      rd.onchange = function () {
+        S.simu.respostas[rd.name] = Number(rd.value);
+        const feitas = Object.keys(S.simu.respostas).length;
+        document.getElementById("sm-contagem").textContent = feitas + " de " + S.simu.questoes.length + " respondidas";
+        document.getElementById("sm-enviar").disabled = feitas < S.simu.questoes.length;
+      };
+    });
+
+    const env = document.getElementById("sm-enviar");
+    if (env) env.onclick = async function () {
+      const s = S.simu;
+      env.disabled = true;
+      const acertos = s.questoes.filter(function (q) { return s.respostas[q.id] === q.correta; }).length;
+      const nota = Math.round(acertos / s.questoes.length * 10000) / 100;
+      const linha = { user_id: S.session.user.id, curso: CURSO.id, aula: n, acertos: acertos, total: s.questoes.length, nota: nota };
+      const r = await sb.from(T.simulados).insert(linha).select("curso,aula,acertos,total,nota,created_at").single();
+      if (r.error) {
+        // Mostra o resultado mesmo assim (é treino), só avisa que não ficou salvo
+        toast("O resultado não ficou salvo: " + traduzErro(r.error), "erro");
+      } else {
+        S.bruto.simulados.unshift(r.data);
+        S.dados.simulados.unshift(r.data);
+      }
+      s.resultado = { acertos: acertos, total: s.questoes.length, nota: nota };
+      telaAula(n, "simulado");
       window.scrollTo(0, 0);
     };
   }
@@ -1632,6 +1806,7 @@
       "<tr><td>Parte prática executada</td><td>" + P.pratica + "</td><td>Com o relato do que fez. O organizador pode conferir.</td></tr>" +
       "<tr><td>Prova</td><td>nota × " + P.prova + "</td><td>Melhor nota de cada prova feita na temporada (até " + (100 * P.prova) + ")</td></tr>" +
       "<tr><td>Aula aprovada</td><td>+" + P.aula + "</td><td>Nota " + curso.notaMinima + " ou mais na aula</td></tr>" +
+      (P.simulado ? "<tr><td>Simulados de uma aula</td><td>+" + P.simulado.xp + "</td><td>Uma vez por aula, ao fazer o simulado em " + P.simulado.dias + " dias diferentes. A nota do simulado não conta.</td></tr>" : "") +
       "</tbody></table>";
   }
 
@@ -1687,6 +1862,7 @@
       "<li><b>Estude todo dia, mesmo que pouco.</b> Bater a meta diária rende bônus de ofensiva. Uma maratona num dia só bate no limite de " + PONTOS.limiteDia + " XP.</li>" +
       "<li><b>Seja honesto nas notas dos flashcards.</b> Card dominado de verdade vale XP; marcar Fácil sem saber faz o card voltar e você esquecer.</li>" +
       "<li><b>Execute as partes práticas</b> e escreva o que fez: cada uma vale " + PONTOS.pratica + " XP.</li>" +
+      (PONTOS.simulado ? "<li><b>Treine no simulado antes da prova.</b> Ele libera junto com a prova, pode ser refeito à vontade e, feito em " + PONTOS.simulado.dias + " dias diferentes, rende +" + PONTOS.simulado.xp + " XP por aula.</li>" : "") +
       "<li><b>Faça as provas assim que liberarem.</b> Elas são o que mais rende XP (até " + (100 * PONTOS.prova) + " cada), e a aula aprovada ainda dá +" + PONTOS.aula + ".</li>" +
       "</ol>" +
       '<p><a class="btn btn-primario" href="#/temporada">Ver o placar da temporada</a></p></section>';
@@ -1808,7 +1984,8 @@
         ["Cards dominados", meu.xp_dominados, meu.dominados + " cards"],
         ["Partes práticas", meu.xp_praticas, meu.praticas + " executadas"],
         ["Provas", meu.xp_provas, meu.provas_feitas + " feitas" + (meu.media_provas !== null ? " · média " + meu.media_provas : "")],
-        ["Aulas aprovadas", meu.xp_aulas, meu.aulas_aprovadas + " aulas"]
+        ["Aulas aprovadas", meu.xp_aulas, meu.aulas_aprovadas + " aulas"],
+        ["Simulados", meu.xp_simulados, (meu.simulados || 0) + " feitos"]
       ].map(function (p) {
         return "<li><span>" + p[0] + ' <small class="muted">' + p[2] + "</small></span><b>+" + Math.round(Number(p[1]) || 0) + "</b></li>";
       }).join("");
@@ -3060,7 +3237,7 @@
       S.session = session;
       if (evento === "PASSWORD_RECOVERY") { S.recuperacao = true; rotear(); return; }
       if (trocouUsuario) {
-        S.perfil = null; S.bruto = null; S.porCurso = {}; S.dados = null; S.revisao = null; S.prova = null;
+        S.perfil = null; S.bruto = null; S.porCurso = {}; S.dados = null; S.revisao = null; S.prova = null; S.simu = null;
         setTimeout(rotear, 0);
       }
     });
