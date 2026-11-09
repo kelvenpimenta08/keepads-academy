@@ -889,3 +889,28 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .simu-preparo.baixo b { color: var(--erro); }
 .simu-bonus { margin: .8rem 0; text-align: left; font-size: .88rem; }
 .simu-bonus p { margin: .4rem 0 0; }
+
+/* Acessos da equipe (administrador) */
+.filtro-periodo { display: flex; gap: .4rem; margin: .2rem 0 1rem; flex-wrap: wrap; }
+.filtro-periodo .chip { text-decoration: none; padding: .35rem .8rem; font-size: .85rem; }
+.acessos-hoje { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.acessos-hoje li { border: 1px solid var(--borda); border-radius: 10px; padding: .65rem .85rem; display: grid; gap: .25rem; }
+.acessos-hoje li.entrou { border-left: 4px solid var(--verde); }
+.acessos-hoje li.nao-entrou { border-left: 4px solid var(--borda); background: var(--fundo); }
+.ah-nome { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+.ah-sessoes { font-size: .88rem; display: grid; gap: .15rem; }
+.grade-acessos th, .grade-acessos td { text-align: center; white-space: nowrap; padding: .45rem .5rem; }
+.grade-acessos th:first-child, .grade-acessos td:first-child { text-align: left; }
+.grade-acessos th { font-size: .75rem; line-height: 1.15; }
+.grade-acessos td.ativo { background: var(--verde-claro); color: var(--verde-escuro); font-size: .85rem; }
+.grade-acessos td.ativo small { display: block; font-size: .7rem; opacity: .8; }
+.grade-acessos td.vazio { color: #b9bfbd; }
+.grade-acessos .hoje { box-shadow: inset 0 -3px 0 var(--verde); }
+.acessos-dia { border-top: 1px solid var(--borda); padding: .55rem 0; }
+.acessos-dia summary { cursor: pointer; display: flex; justify-content: space-between; gap: .5rem; }
+.acessos-lista { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .35rem; }
+.acessos-lista li { display: grid; grid-template-columns: 7.2rem 1fr; gap: .5rem; font-size: .88rem; align-items: baseline; }
+.al-hora { font-family: var(--fonte-rotulo); font-size: .8rem; color: var(--verde-escuro); }
+@media (max-width: 600px) {
+  .acessos-lista li { grid-template-columns: 1fr; gap: 0; }
+}
