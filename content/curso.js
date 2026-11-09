@@ -119,7 +119,8 @@
     dominado: 3,            // por card com memória de 7 dias ou mais
     pratica: 15,            // por parte prática executada (com o relato do que fez)
     prova: 2,               // XP = nota × 2 (melhor nota de cada prova na temporada)
-    aula: 50                // bônus por aula aprovada
+    aula: 50,               // bônus por aula aprovada
+    simulado: { xp: 10, dias: 3 }  // bônus único por aula: simulados feitos em 3 dias diferentes
   };
 
   // Níveis pelo XP da temporada
