@@ -1,0 +1,44 @@
+// Simulado da Aula 01 (Adriano Gianini): questões de treino, diferentes das da prova.
+// Os ids não podem mudar depois de publicados.
+(function () {
+  const aula = ((window.AULAS || {})["adriano-ia-trafego"] || {})[1];
+  if (!aula) return;
+  aula.simulado = [
+    { id: "a1-s01", pergunta: "O dono de uma agência empolgou com a Freedom e quer automatizar 100% da operação, inclusive a definição de estratégia de cada cliente. Qual leitura a aula faz dessa decisão?",
+      opcoes: ["Está certo: se a tecnologia já permite, manter qualquer parte manual é desperdício de tempo", "Está errado: estratégia é a única parte que a IA ainda não consegue fazer tecnicamente", "A decisão é dele, mas a aula sugere manter na mão o “20% estratégico”, onde a agência ganha dos concorrentes e faz o cliente vender", "Deveria automatizar só os 20% estratégicos e deixar os 80% operacionais com o time"],
+      correta: 2, explicacao: "Automatizar tudo já é possível; a pergunta é o que você quer automatizar. A aula recomenda preservar os ~20% estratégicos e automatizar o resto." },
+    { id: "a1-s02", pergunta: "Todo dia de manhã, um analista abre as 15 contas de Google Ads da agência para ver resultados e saldos e monta um resumo. Segundo a aula, qual é o caminho mais simples para tirar isso da mão dele?",
+      opcoes: ["Uma tarefa agendada no Cowork que olha as contas, confere resultados e saldos e monta o relatório", "Construir um agente completo hospedado em VPS antes de qualquer outra coisa", "Contratar uma ferramenta de relatórios com plano anual que já tenha esse recurso pronto", "Pedir ao Claude Chat que gere o relatório sempre que o analista colar os números"],
+      correta: 0, explicacao: "Nem tudo precisa de agente: o Cowork com tarefa agendada já resolve esse tipo de rotina, como a própria aula exemplifica com as contas do Google Ads." },
+    { id: "a1-s03", pergunta: "O CS da agência só descobre que um cliente está insatisfeito quando chega o pedido de cancelamento. Qual recurso citado na aula ataca exatamente esse problema?",
+      opcoes: ["Uma pesquisa de NPS mensal enviada automaticamente para todos os clientes ativos", "Um relatório semanal de performance para mostrar ao cliente que as campanhas vão bem", "O conselho de agentes, que discorda das decisões do CS antes de cada reunião", "O “fofoqueiro”: um número de WhatsApp em todos os grupos que avisa quando o cliente some, esfria ou demonstra insatisfação"],
+      correta: 3, explicacao: "O fofoqueiro é um alerta de churn: monitora os grupos de clientes e avisa o CS quando o engajamento cai ou aparece insatisfação." },
+    { id: "a1-s04", pergunta: "Você quer um agente que faça SEO para o canal de YouTube da agência, mas ninguém do time entende do assunto. Qual é a saída que a aula mostra?",
+      opcoes: ["Contratar um especialista para gravar horas de explicação e só então criar o agente", "Transcrever canais dos maiores especialistas no assunto e usar esse conhecimento como contexto do agente", "Deixar o Claude usar o que ele já sabe de SEO, já que o modelo foi treinado com a internet inteira", "Desistir do agente até alguém do time fazer um curso completo de SEO de YouTube"],
+      correta: 1, explicacao: "“Quem disse que o contexto precisa ser seu?” O analista de SEO de YouTube do Adriano foi montado com três grandes canais transcritos." },
+    { id: "a1-s05", pergunta: "Você quer que o Claude replique os relatórios que a agência já monta no Reportei. Qual forma de referência a aula aponta como a que mais elimina ambiguidade nesse caso?",
+      opcoes: ["Dar acesso à própria ferramenta para ele navegar e ver como os relatórios são montados", "Descrever por escrito cada seção do relatório, na ordem em que aparece", "Listar só as métricas que entram no relatório e deixar o layout por conta dele", "Pedir que ele pesquise na internet como costumam ser relatórios de tráfego pago"],
+      correta: 0, explicacao: "Referência acaba com a ambiguidade: print, link, gravação de tela ou acesso à ferramenta (como o Reportei) para ele navegar e replicar." },
+    { id: "a1-s06", pergunta: "O time estimou 30 dias para migrar todos os vídeos de uma plataforma (Panda Video) e conferir o que já tinha sido migrado. Como a aula conta que isso foi resolvido?",
+      opcoes: ["Contratando um freelancer para fazer a migração manual em paralelo com o time", "Usando o Cowork para clicar em cada vídeo e copiar os links um a um", "Pela API, cruzando o que já tinha sido migrado, em uma tarde de cerca de quatro horas", "Exportando tudo em planilha e pedindo ao Claude Chat para comparar as listas"],
+      correta: 2, explicacao: "Com acesso por API, o Claude cruzou o que já estava migrado e fez em uma tarde o que o time imaginava levar um mês." },
+    { id: "a1-s07", pergunta: "Como o Adriano montou o próprio “segundo cérebro” com as reuniões que grava?",
+      opcoes: ["Baixou as gravações manualmente toda semana e colou os resumos num único documento", "Pediu ao time para escrever atas de cada reunião e guardar numa pasta compartilhada", "Usou só o Plaud, que já entrega as reuniões organizadas por tema automaticamente", "Conectou o Claude ao Meet e ao Zoom, pediu tudo em .md com links no estilo do Obsidian e separou por “cadeiras”"],
+      correta: 3, explicacao: "Ele conectou as ferramentas de reunião, gerou arquivos .md interligados como no Obsidian e organizou os conhecimentos por cadeiras (aula, reunião de time, liderança)." },
+    { id: "a1-s08", pergunta: "Duas agências usam o mesmo plano e o mesmo modelo do Claude, mas uma tira resultados muito melhores. Pela “lei universal nº 1” da aula, o que mais explica a diferença?",
+      opcoes: ["A agência melhor usa prompts mais curtos, que o modelo entende com mais facilidade", "A agência melhor entrega muito mais contexto: a mágica, a maestria e a escala estão no contexto", "A agência melhor roda tudo no Opus, enquanto a outra fica no Sonnet", "A agência melhor tem mais pessoas usando o Claude ao mesmo tempo"],
+      correta: 1, explicacao: "Lei universal nº 1: a mágica está no contexto. Quem tem contexto é rei." },
+    { id: "a1-s09", pergunta: "Você vai colocar o “fofoqueiro” para rodar 24 horas nos grupos de WhatsApp dos clientes. Além de hospedar fora do seu computador, qual cuidado a aula cita?",
+      opcoes: ["Rodar o agente direto no celular do CS, para ficar sempre conectado", "Hospedar em um servidor nos Estados Unidos, que é mais estável para WhatsApp", "Hospedar o agente de WhatsApp em um servidor no Brasil", "Hospedar no Cowork, que mantém o WhatsApp aberto em segundo plano"],
+      correta: 2, explicacao: "Agente local depende do seu computador; para 24/7 é preciso VPS, e para WhatsApp a orientação é hospedar no Brasil." },
+    { id: "a1-s10", pergunta: "Um aluno diz: “A Freedom vai ser um otimizador de campanhas”. Como a aula descreve a Freedom de forma mais fiel?",
+      opcoes: ["Uma agência de marketing 100% automatizada, do onboarding do cliente ao planejamento, criação, análise, otimização, saldos e financeiro", "Um dashboard que reúne as métricas de Google Ads e Meta Ads de todos os clientes", "Um chatbot de atendimento que responde os clientes da agência no WhatsApp", "Um gerador de criativos e anúncios que substitui o designer e o redator"],
+      correta: 0, explicacao: "A Freedom é a IA construída na mentoria: a agência inteira automatizada, não uma ferramenta isolada." },
+    { id: "a1-s11", pergunta: "Um gestor quer deixar a IA pausar e escalar campanhas sozinha porque “se errar, ela mesma conserta”. Qual é o contraponto da aula?",
+      opcoes: ["A IA não consegue pausar campanhas pela API, então a dúvida nem se aplica", "Quando a IA erra ela diz “errei, vou consertar”, mas quem perde o contrato é a agência; por isso ela propõe e você aprova", "A IA erra menos que um humano, então o risco de deixá-la sozinha é aceitável", "Basta pedir que ela registre cada mudança num log para poder desfazer depois"],
+      correta: 1, explicacao: "Quem paga a conta do erro é você. A responsabilidade continua sendo da agência, o que justifica a aprovação humana." },
+    { id: "a1-s12", pergunta: "Um cliente pergunta ao gestor: “Dá para automatizar a minha operação com IA?”. Segundo a aula, como essa pergunta deveria ser reformulada?",
+      opcoes: ["“Quanto custa automatizar?”, porque a tecnologia já está pronta e o limite é só o orçamento", "“Qual ferramenta de IA é a melhor?”, porque a escolha do modelo define o que é possível", "“Quando a IA vai conseguir?”, porque ainda faltam modelos capazes para a maioria das tarefas", "“O que eu quero automatizar e o que não quero?”, porque tecnologicamente já é possível e a decisão é de autonomia e risco"],
+      correta: 3, explicacao: "A pergunta mudou: não é mais se dá, e sim o que você quer automatizar, considerando autonomia e risco." }
+  ];
+})();
