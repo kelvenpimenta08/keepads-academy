@@ -2137,6 +2137,10 @@
     if (s.simulados) itens.push(s.simulados + (s.simulados === 1 ? " simulado" : " simulados"));
     return itens.length ? itens.join(" · ") : "só abriu o app";
   }
+  // Estudou de verdade na sessão: revisou flashcards, concluiu pomodoro, fez prova ou simulado
+  // (só abrir o app ou só marcar prática não conta como tempo estudando)
+  function estudou(s) { return s.cards > 0 || s.pomodoros > 0 || s.provas > 0 || s.simulados > 0; }
+
   function janela(s) {
     const a = horaBR(s.inicio), b = horaBR(s.fim);
     return a === b ? a : a + "–" + b;
@@ -2172,19 +2176,25 @@
 
     // 1) Hoje: quem entrou (em ordem de horário) e quem não entrou (desde quando)
     const linhasHoje = pessoas.map(function (p) {
-      const ss = doDia(p.id, hoje);
-      return { p: p, ss: ss, primeira: ss.length ? Date.parse(ss[0].inicio) : null, ultimo: ultimo[p.id] ? Date.parse(ultimo[p.id]) : null };
+      const ss = doDia(p.id, hoje), est = ss.filter(estudou);
+      return { p: p, ss: ss, est: est, primeira: est.length ? Date.parse(est[0].inicio) : null,
+        abriu: ss.length ? Date.parse(ss[0].inicio) : null, ultimo: ultimo[p.id] ? Date.parse(ultimo[p.id]) : null };
     }).sort(function (a, b) {
       if (a.primeira && b.primeira) return a.primeira - b.primeira;
       if (a.primeira || b.primeira) return a.primeira ? -1 : 1;
+      if (a.abriu || b.abriu) return a.abriu && b.abriu ? a.abriu - b.abriu : a.abriu ? -1 : 1;
       return (b.ultimo || 0) - (a.ultimo || 0);
     });
-    const entraram = linhasHoje.filter(function (l) { return l.ss.length; }).length;
+    const estudaram = linhasHoje.filter(function (l) { return l.est.length; }).length;
+    const soAbriram = linhasHoje.filter(function (l) { return l.ss.length && !l.est.length; }).length;
     const blocoHoje = '<section class="painel"><h2>Hoje · ' + nomeDia(hoje) + "</h2>" +
-      '<p class="muted">' + entraram + " de " + pessoas.length + " pessoas entraram hoje.</p>" +
+      '<p class="muted">' + estudaram + " de " + pessoas.length + " pessoas estudaram hoje" +
+      (soAbriram ? " · " + soAbriram + (soAbriram === 1 ? " só abriu" : " só abriram") + " o app" : "") + ".</p>" +
       '<ul class="acessos-hoje">' + linhasHoje.map(function (l) {
         if (l.ss.length) {
-          return '<li class="entrou"><div class="ah-nome"><b>' + esc(l.p.nome || "Sem nome") + '</b><span class="chip chip-ok">entrou às ' + horaBR(l.ss[0].inicio) + "</span></div>" +
+          const chip = l.est.length ? '<span class="chip chip-ok">estudou às ' + horaBR(l.est[0].inicio) + "</span>"
+            : '<span class="chip chip-cinza">só abriu às ' + horaBR(l.ss[0].inicio) + "</span>";
+          return '<li class="' + (l.est.length ? "entrou" : "so-abriu") + '"><div class="ah-nome"><b>' + esc(l.p.nome || "Sem nome") + "</b>" + chip + "</div>" +
             '<div class="ah-sessoes">' + l.ss.map(function (s) {
               return "<div>" + aparelho(s) + "<b>" + janela(s) + '</b> <span class="muted">' + esc(oQueFez(s)) + "</span></div>";
             }).join("") + "</div></li>";
@@ -2203,19 +2213,23 @@
     const dias = [];
     for (let i = 0; i < N; i++) dias.push(diaMenos(hoje, i));
     const grade = '<section class="painel"><h2>Dia a dia</h2>' +
-      '<p class="muted pequeno">Horário da primeira entrada no dia. "+1" = voltou mais vezes no mesmo dia (todos os horários estão na linha do tempo abaixo).</p>' +
+      '<p class="muted pequeno">Verde = estudou no dia (flashcards, pomodoro, prova ou simulado), com o horário em que começou. ' +
+      'Horário em cinza = só abriu o app, sem estudar. "+1" = voltou a estudar mais vezes no mesmo dia (todos os horários estão na linha do tempo abaixo).</p>' +
       '<div class="tabela-rolagem"><table class="tabela grade-acessos"><thead><tr><th>Pessoa</th>' +
       dias.map(function (d) { return "<th" + (d === hoje ? ' class="hoje"' : "") + ">" + nomeDia(d).replace(" ", "<br>") + "</th>"; }).join("") +
       "<th>Dias</th></tr></thead><tbody>" +
       pessoas.map(function (p) {
         let ativos = 0;
         const cels = dias.map(function (d) {
-          const ss = doDia(p.id, d);
-          if (!ss.length) return '<td class="vazio' + (d === hoje ? " hoje" : "") + '">·</td>';
-          ativos++;
+          const ss = doDia(p.id, d), est = ss.filter(estudou);
+          const marcaHoje = d === hoje ? " hoje" : "";
+          if (!ss.length) return '<td class="vazio' + marcaHoje + '">·</td>';
           const lista = ss.map(function (s) { return janela(s) + " (" + oQueFez(s) + ")"; }).join("\n");
-          return '<td class="ativo' + (d === hoje ? " hoje" : "") + '" title="' + esc(lista) + '"><b>' + horaBR(ss[0].inicio) + "</b>" +
-            (ss.length > 1 ? "<small>+" + (ss.length - 1) + "</small>" : "") + "</td>";
+          // Abriu o app mas não estudou: fica em branco, só com o horário em cinza
+          if (!est.length) return '<td class="so-abriu' + marcaHoje + '" title="' + esc(lista) + '">' + horaBR(ss[0].inicio) + "</td>";
+          ativos++;
+          return '<td class="ativo' + marcaHoje + '" title="' + esc(lista) + '"><b>' + horaBR(est[0].inicio) + "</b>" +
+            (est.length > 1 ? "<small>+" + (est.length - 1) + "</small>" : "") + "</td>";
         }).join("");
         return "<tr><td><b>" + esc(curto(p.nome)) + "</b></td>" + cels + "<td><b>" + ativos + "</b>/" + N + "</td></tr>";
       }).join("") + "</tbody></table></div></section>";
