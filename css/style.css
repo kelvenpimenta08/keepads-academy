@@ -914,3 +914,5 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 @media (max-width: 600px) {
   .acessos-lista li { grid-template-columns: 1fr; gap: 0; }
 }
+.grade-acessos td.so-abriu { color: #9aa19f; font-size: .8rem; }
+.acessos-hoje li.so-abriu { border-left: 4px solid #c9cfcd; }
