@@ -52,7 +52,7 @@
         { numero: 3, titulo: "Prompt CTR, skills e o primeiro agente", disponivel: true },
         { numero: 4, titulo: "Prioridades, processo e skills de persona e anúncios", disponivel: true },
         { numero: 5, titulo: "Processo, procedimento e o otimizador", disponivel: true },
-        { numero: 6, titulo: "Aula 6", disponivel: false }
+        { numero: 6, titulo: "Plano de ação e níveis de rastreamento", disponivel: true }
       ]
     }),
     Object.assign({}, padrao, {
