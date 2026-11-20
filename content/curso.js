@@ -71,6 +71,22 @@
         { numero: 3, titulo: "Matriz criativa de performance", disponivel: true },
         { numero: 4, titulo: "Tráfego pago começa no destino", disponivel: true }
       ]
+    }),
+    // Cursos livres: conteúdo público (ex.: aulas do YouTube) que a equipe quer estudar com a
+    // metodologia do Academy. Aparecem para todos, mas ficam FORA do campeonato: não têm prova
+    // oficial nem certificado, e flashcards e pomodoros deles não contam para placar, ofensiva ou ranking.
+    // O id começa com "livre-" (o banco usa isso) e os ids dos cards levam o prefixo do curso (ex.: "ca-a1-c01").
+    Object.assign({}, padrao, {
+      id: "livre-conrado-adolfo",
+      livre: true,
+      tipo: "Curso livre",
+      titulo: "Aulas do Conrado Adolfo",
+      mentor: "Conrado Adolfo",
+      descricao: "Aulas públicas do Conrado Adolfo no YouTube, estudadas com a metodologia do Academy: resumo, flashcards, práticas e simulado.",
+      imagem: "",
+      versaoProvas: 1,
+      prefixoArquivos: "ca-",   // arquivos: content/ca-aula-NN.js, content/resumos/ca-aula-NN.js, content/simulados/ca-aula-NN.js
+      aulas: []                 // as aulas entram aqui conforme o material chegar
     })
   ];
 
