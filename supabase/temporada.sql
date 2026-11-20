@@ -42,6 +42,12 @@ as $$
       coalesce((p_regras ->> 'aula')::numeric, 50) as r_aula,
       coalesce((p_regras -> 'simulado' ->> 'xp')::numeric, 10) as r_sim,
       coalesce((p_regras -> 'simulado' ->> 'dias')::int, 3) as r_sim_dias,
+      -- Prazo das provas (dias depois de liberar). Fora do prazo a prova vale "fator" do XP.
+      -- 0 = sem prazo. "inicio" = dia em que a regra entrou: o prazo nunca começa antes dele.
+      coalesce((p_regras -> 'prazoProva' ->> 'teorica')::int, 0) as pz_t,
+      coalesce((p_regras -> 'prazoProva' ->> 'pratica')::int, 0) as pz_p,
+      coalesce((p_regras -> 'prazoProva' ->> 'fator')::numeric, 1) as pz_f,
+      coalesce((p_regras -> 'prazoProva' ->> 'inicio')::date, p_inicio) as pz_ini,
       coalesce((p_regras ->> 'notaMinima')::numeric, 70) as r_min,
       coalesce((p_regras -> 'pesos' ->> 'teorica')::numeric, 0.4) as w_t,
       coalesce((p_regras -> 'pesos' ->> 'pratica')::numeric, 0.4) as w_p,
@@ -125,9 +131,38 @@ as $$
       and q.created_at >= cfg.ts0
     order by q.user_id, q.aula, q.tipo, q.nota desc, q.created_at
   ),
+  -- Dia em que as provas de cada aula liberaram para a pessoa (mesma regra do app e do banco:
+  -- 7 dias desde a primeira revisão de flashcards da aula e revisão em 4 dias diferentes)
+  liberacao as (
+    select x.user_id, x.aula, greatest(min(x.dia) + 7, (array_agg(x.dia order by x.dia))[4]) as lib
+    from (
+      select distinct l.user_id, l.aula, (l.reviewed_at at time zone 'America/Sao_Paulo')::date as dia
+      from public.academy_review_log l where l.curso = p_curso
+    ) x
+    group by x.user_id, x.aula
+    having count(*) >= 4
+  ),
+  -- XP de cada tentativa: nota × r_prova; feita depois do prazo, vale pz_f disso.
+  -- Vale a tentativa que der mais XP (cada prova conta uma vez).
+  tentativas_xp as (
+    select q.user_id, q.aula, q.tipo, q.created_at,
+      q.nota * cfg.r_prova * case
+        when (case when q.tipo = 'teorica' then cfg.pz_t else cfg.pz_p end) > 0
+          and la.lib is not null
+          and (q.created_at at time zone 'America/Sao_Paulo')::date >
+              greatest(la.lib, cfg.pz_ini) + (case when q.tipo = 'teorica' then cfg.pz_t else cfg.pz_p end)
+        then cfg.pz_f else 1 end as xp
+    from public.academy_quiz_attempts q cross join cfg
+    left join liberacao la on la.user_id = q.user_id and la.aula = q.aula
+    where q.curso = p_curso and q.respostas ->> '_versao' = p_versao::text
+      and (q.created_at at time zone 'America/Sao_Paulo')::date between cfg.ini and cfg.fim
+      and q.created_at >= cfg.ts0
+  ),
   ev_prova as (
-    select pt.user_id, (pt.created_at at time zone 'America/Sao_Paulo')::date as dia, 'prova'::text as tipo, pt.nota * cfg.r_prova as xp
-    from provas_temp pt cross join cfg
+    select distinct on (t.user_id, t.aula, t.tipo)
+      t.user_id, (t.created_at at time zone 'America/Sao_Paulo')::date as dia, 'prova'::text as tipo, t.xp
+    from tentativas_xp t
+    order by t.user_id, t.aula, t.tipo, t.xp desc, t.created_at
   ),
   -- Aula aprovada (mesma conta do app: provas + partes práticas, nota mínima), quando aprovada na temporada
   melhores as (
