@@ -120,7 +120,11 @@
     pratica: 15,            // por parte prática executada (com o relato do que fez)
     prova: 2,               // XP = nota × 2 (melhor nota de cada prova na temporada)
     aula: 50,               // bônus por aula aprovada
-    simulado: { xp: 10, dias: 3 }  // bônus único por aula: simulados feitos em 3 dias diferentes
+    simulado: { xp: 10, dias: 3 },  // bônus único por aula: simulados feitos em 3 dias diferentes
+    // Prazo das provas, em dias depois que liberam. Fora do prazo a prova ainda vale para a nota
+    // e o certificado, mas o XP na temporada é multiplicado por "fator".
+    // "inicio": dia em que a regra entrou; provas que já estavam liberadas contam o prazo a partir dele.
+    prazoProva: { teorica: 7, pratica: 14, fator: 0.5, inicio: "2026-11-20" }
   };
 
   // Níveis pelo XP da temporada
