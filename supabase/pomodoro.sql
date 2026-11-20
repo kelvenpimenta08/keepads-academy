@@ -83,6 +83,7 @@ as $$
     select l.user_id, (l.reviewed_at at time zone 'America/Sao_Paulo')::date as dia
     from public.academy_review_log l
     where l.reviewed_at >= public.academy_inicio_contagem()
+      and l.curso not like 'livre-%'   -- curso livre (fora do campeonato) não conta para a ofensiva
     group by 1, 2
     having count(*) >= p_meta
   ),

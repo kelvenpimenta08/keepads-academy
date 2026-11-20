@@ -84,7 +84,7 @@ language plpgsql security definer set search_path = public
 as $$
 begin
   new.reviewed_at := now();
-  if new.card_id !~ ('^(ds-)?a' || new.aula || '-c[0-9]{2}$') then
+  if new.card_id !~ ('^([a-z]{2,4}-)?a' || new.aula || '-c[0-9]{2}$') then
     raise exception 'Flashcard inválido.';
   end if;
   -- Ninguém responde dois cards em menos de 0,7 segundo (virar e avaliar já leva mais que isso)
@@ -107,7 +107,7 @@ as $$
 declare
   limite numeric;
 begin
-  if new.card_id !~ ('^(ds-)?a' || new.aula || '-c[0-9]{2}$') then
+  if new.card_id !~ ('^([a-z]{2,4}-)?a' || new.aula || '-c[0-9]{2}$') then
     raise exception 'Flashcard inválido.';
   end if;
   new.last_review := now();
@@ -140,7 +140,7 @@ returns trigger
 language plpgsql security definer set search_path = public
 as $$
 begin
-  if new.task_id !~ ('^(ds-)?a' || new.aula || '-p[0-9]{1,2}$') then
+  if new.task_id !~ ('^([a-z]{2,4}-)?a' || new.aula || '-p[0-9]{1,2}$') then
     raise exception 'Parte prática inválida.';
   end if;
   if new.done then

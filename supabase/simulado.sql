@@ -42,8 +42,9 @@ begin
   ) then
     raise exception 'Você acabou de fazer um simulado desta aula. Leia as explicações e tente de novo em alguns minutos.';
   end if;
-  -- Mesma liberação da prova: uma semana estudando os flashcards da aula, em 4 dias diferentes
-  if not public.academy_is_admin() then
+  -- Mesma liberação da prova: uma semana estudando os flashcards da aula, em 4 dias diferentes.
+  -- Curso livre (id "livre-..."): o simulado é o treino da aula e fica aberto desde o começo.
+  if not public.academy_is_admin() and new.curso not like 'livre-%' then
     select min(l.reviewed_at), count(distinct (l.reviewed_at at time zone 'America/Sao_Paulo')::date)
       into primeira, dias
     from public.academy_review_log l
