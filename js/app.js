@@ -287,7 +287,7 @@
     let ultimo = null;
     try { ultimo = localStorage.getItem("academy-ultimo-curso"); } catch (e) {}
     return CURSOS.find(function (c) { return c.id === ultimo; }) ||
-      CURSOS.find(function (c) { return c.aulas.some(function (a) { return a.disponivel; }); }) ||
+      CURSOS.find(function (c) { return !ehLivre(c) && c.aulas.some(function (a) { return a.disponivel; }); }) ||
       CURSOS[0];
   }
 
@@ -299,6 +299,11 @@
   // flashcards, de qualquer aula ou curso. O ranking e a temporada usam a mesma regra no banco.
   // Pomodoro do campeonato (estudo ou execução). O de foco livre não conta para ofensiva nem placar.
   function ehCampeonato(tipo) { return !tipo || tipo === "estudo" || tipo === "execucao"; }
+
+  // Curso livre (content/curso.js, livre: true): fora do campeonato, sem prova oficial nem certificado
+  function ehLivre(c) { return !!(c && c.livre); }
+  const CURSOS_LIVRES = {};
+  (window.CURSOS || []).forEach(function (c) { if (c.livre) CURSOS_LIVRES[c.id] = true; });
 
   function pomodoroDisperso(p) {
     return (p.tipo || "estudo") === "estudo" && (p.fora_segundos || 0) >= REGRAS.limiteForaMinutos * 60;
@@ -313,7 +318,8 @@
     const porDia = {}, focoPorDia = {};
     // Só conta o que foi feito depois do início da competição
     const inicio = REGRAS.inicioContagem ? Date.parse(REGRAS.inicioContagem) : 0;
-    log = log.filter(function (l) { return Date.parse(l.reviewed_at) >= inicio; });
+    // Flashcards de curso livre não contam para a meta do dia (o campeonato é só das mentorias)
+    log = log.filter(function (l) { return Date.parse(l.reviewed_at) >= inicio && !CURSOS_LIVRES[l.curso]; });
     pomodoros = pomodoros.filter(function (p) { return Date.parse(p.concluido_em) >= inicio && ehCampeonato(p.tipo); });
     log.forEach(function (l) {
       const d = diaLocal(l.reviewed_at);
@@ -440,9 +446,11 @@
       item("#/", "📚", "Mentorias") +
       (cursoDoMenu()
         ? item(rota(""), "🎓", "Aulas") +
-          item(rota("ranking"), "🥇", "Ranking") +
-          item(rota("certificado"), "📜", "Certificado") +
-          (S.perfil && S.perfil.is_admin ? item(rota("equipe"), "👥", "Equipe") : "")
+          // Curso livre não tem ranking, certificado nem painel da equipe
+          (ehLivre(cursoDoMenu()) ? "" :
+            item(rota("ranking"), "🥇", "Ranking") +
+            item(rota("certificado"), "📜", "Certificado") +
+            (S.perfil && S.perfil.is_admin ? item(rota("equipe"), "👥", "Equipe") : ""))
         : "") +
       item("#/relatorio", "📊", "Relatório") +
       (S.perfil && S.perfil.is_admin ? item("#/acessos", "🕒", "Acessos") : "") +
@@ -683,12 +691,22 @@
 
   function telaCursos() {
     const primeiroNome = ((S.perfil && S.perfil.nome) || "").split(" ")[0];
-    const cards = CURSOS.map(function (c) {
+    const cartao = function (c) {
       const disponiveis = aulasDisponiveis(c);
       let status, linha;
       if (!disponiveis.length) {
         status = '<span class="chip chip-cinza">Em breve</span>';
         linha = "Conteúdo em preparação";
+      } else if (ehLivre(c)) {
+        // Curso livre: sem aprovação; mostra cards vistos e o que tem para revisar hoje
+        const dados = dadosDoCurso(c);
+        const resumos = comCurso(c, function () { return disponiveis.map(function (a) { return resumoAula(a.numero, dados); }); });
+        const total = resumos.reduce(function (s, r) { return s + r.totalCards; }, 0);
+        const vistos = resumos.reduce(function (s, r) { return s + r.totalCards - r.novos; }, 0);
+        const revisar = resumos.reduce(function (s, r) { return s + r.vencidos + r.novos; }, 0);
+        status = vistos ? '<span class="chip chip-aviso">Em andamento</span>' : '<span class="chip chip-cinza">Não iniciado</span>';
+        linha = disponiveis.length + (disponiveis.length === 1 ? " aula" : " aulas") + " · " + vistos + "/" + total + " cards vistos" +
+          (revisar ? " · <b>" + revisar + " flashcards para hoje</b>" : "");
       } else {
         const dados = dadosDoCurso(c);
         const resumos = comCurso(c, function () {
@@ -711,7 +729,9 @@
         '<p class="muted">' + esc(c.descricao) + "</p>" +
         '<p class="curso-linha">' + linha + "</p>" +
         '<span class="curso-entrar">Entrar →</span></div></a>';
-    }).join("");
+    };
+    const cards = CURSOS.filter(function (c) { return !ehLivre(c); }).map(cartao).join("");
+    const livres = CURSOS.filter(ehLivre).map(cartao).join("");
 
     layout(
       '<section class="hero hero-cursos"><div>' +
@@ -723,7 +743,12 @@
       bannerTemporada() +
       blocoOfensiva() +
       blocoSemana() +
-      '<section class="grade-cursos">' + cards + "</section>"
+      '<section class="grade-cursos">' + cards + "</section>" +
+      (livres
+        ? '<h2 class="titulo-secao">📘 Cursos livres</h2>' +
+          '<p class="muted">Cursos extras que a equipe estuda com a metodologia do Academy. Ficam fora do campeonato: não contam para placar, ofensiva nem ranking.</p>' +
+          '<section class="grade-cursos">' + livres + "</section>"
+        : "")
     );
   }
 
@@ -746,6 +771,24 @@
           '<p class="muted">O conteúdo entra aqui assim que a aula acontecer.</p></article>';
       }
       const revisar = r.vencidos + r.novos;
+      if (ehLivre(CURSO)) {
+        // Curso livre: sem nota nem provas; o progresso é flashcards, práticas e simulado
+        const vistos = r.totalCards - r.novos;
+        const simus = ((S.dados && S.dados.simulados) || []).filter(function (s) { return s.aula === a.numero; }).length;
+        return '<article class="aula-card"><div class="aula-topo"><div class="aula-num">Aula ' + dois(a.numero) + "</div>" +
+          (vistos || r.feitas ? '<span class="chip chip-aviso">Em andamento</span>' : '<span class="chip chip-cinza">Não iniciada</span>') + "</div>" +
+          "<h3>" + esc(a.titulo) + "</h3>" +
+          '<ul class="aula-metricas">' +
+          "<li><span>Flashcards vistos</span><b>" + vistos + "/" + r.totalCards + "</b>" + barra(vistos / r.totalCards * 100) + "</li>" +
+          "<li><span>Flashcards dominados</span><b>" + r.dominados + "/" + r.totalCards + "</b>" + barra(r.dominados / r.totalCards * 100) + "</li>" +
+          "<li><span>Partes práticas executadas</span><b>" + r.feitas + "/" + r.totalTarefas + "</b>" + barra(r.checklist) + "</li>" +
+          "<li><span>Simulados feitos</span><b>" + simus + "</b></li>" +
+          "</ul>" +
+          '<div class="aula-acoes">' +
+          (revisar ? '<a class="btn btn-primario" href="' + rota("aula/" + a.numero) + '/revisao">' + tranca + "Revisar agora (" + revisar + ")</a>" : '<span class="ok-hoje">Revisão em dia</span>') +
+          '<a class="btn btn-secundario" href="' + rota("aula/" + a.numero) + "/" + (AULAS[a.numero].fases ? "resumo" : "pratica") + '">' + tranca + "Abrir aula</a>" +
+          "</div></article>";
+      }
       return '<article class="aula-card"><div class="aula-topo"><div class="aula-num">Aula ' + dois(a.numero) + "</div>" + chipStatus(r) + "</div>" +
         "<h3>" + esc(a.titulo) + "</h3>" +
         '<div class="aula-nota"><b>' + r.nota + '</b><span>/100</span></div>' +
@@ -780,9 +823,14 @@
         ? "Olá" + (primeiroNome ? ", " + esc(primeiroNome) : "") + "! As aulas desta mentoria ainda vão entrar aqui."
         : (primeiroNome ? esc(primeiroNome) + ", v" : "V") + (paraHoje ? "ocê tem <b>" + paraHoje + " flashcards</b> para revisar hoje." : "ocê não tem flashcards pendentes hoje. Bom trabalho!")) +
       "</p></div>" +
-      '<div class="hero-stats"><div><b>' + aprovadas + "/" + CURSO.aulas.length + "</b><span>aulas aprovadas</span></div>" +
-      "<div><b>🔥 " + calcularOfensiva().dias + "</b><span>dias de ofensiva</span></div>" +
-      "<div><b>" + CURSO.notaMinima + "</b><span>nota mínima</span></div></div></section>" +
+      (ehLivre(CURSO)
+        ? '<div class="hero-stats"><div><b>' + CURSO.aulas.length + "</b><span>aulas</span></div>" +
+          "<div><b>🎯</b><span>curso livre</span></div></div></section>" +
+          '<p class="aviso">📘 <b>Curso livre:</b> estude com a mesma metodologia (resumo, flashcards, práticas e simulado). ' +
+          "Ele não tem prova oficial nem certificado, e não conta para o campeonato: os pomodoros entram no seu relatório como foco livre.</p>"
+        : '<div class="hero-stats"><div><b>' + aprovadas + "/" + CURSO.aulas.length + "</b><span>aulas aprovadas</span></div>" +
+          "<div><b>🔥 " + calcularOfensiva().dias + "</b><span>dias de ofensiva</span></div>" +
+          "<div><b>" + CURSO.notaMinima + "</b><span>nota mínima</span></div></div></section>") +
       blocoProvasComPrazo(aulas) +
       (CURSO.linkAulas
         ? '<section class="painel acesso-aulas"><div class="acesso-texto"><h2>🎬 Plataforma para assistir a mentoria</h2>' +
@@ -791,7 +839,7 @@
         : "") +
       (semAulas
         ? '<section class="painel centro vazio"><h2>Conteúdo em preparação</h2><p class="muted">' + esc(CURSO.descricao) +
-          "</p><p>Assim que a primeira aula for liberada, os flashcards, as partes práticas e as provas aparecem aqui.</p></section>"
+          "</p><p>Assim que a primeira aula for liberada, " + (ehLivre(CURSO) ? "o resumo, os flashcards, as partes práticas e o simulado" : "os flashcards, as partes práticas e as provas") + " aparecem aqui.</p></section>"
         : '<section class="grade-aulas">' + cards + "</section>") +
       '<section class="metodo"><h2>Como estudar para fixar de verdade</h2><ol>' +
       "<li><b>Faça a parte prática antes de reler.</b> Execute cada tarefa e marque “Executei”.</li>" +
@@ -822,6 +870,8 @@
       if (x[0] === "resumo") return !!(aula.fases && aula.fases.length);
       if (x[0] === "mapa") return !!(aula.mapa && aula.mapa.ramos);
       if (x[0] === "simulado") return !!(aula.simulado && aula.simulado.length);
+      // Curso livre: sem prova oficial nem nota (o treino é o simulado)
+      if (ehLivre(CURSO) && (x[0] === "teorica" || x[0] === "prova-pratica" || x[0] === "nota")) return false;
       return true;
     });
   }
@@ -854,7 +904,10 @@
       '<a href="' + rota("") + '" class="voltar">← Todas as aulas</a>' +
       '<header class="aula-cabeca"><div><div class="aula-num">Aula ' + dois(n) + "</div><h1>" + esc(aula.titulo) + "</h1>" +
       '<p class="muted">' + esc(aula.resumo) + "</p></div>" +
-      '<div class="aula-cabeca-nota"><b>' + r.nota + "</b><span>nota atual</span>" + chipStatus(r) + "</div></header>" +
+      (ehLivre(CURSO)
+        ? '<div class="aula-cabeca-nota"><b>' + (r.totalCards - r.novos) + "/" + r.totalCards + "</b><span>cards vistos</span>" +
+          '<span class="chip chip-cinza">curso livre</span></div></header>'
+        : '<div class="aula-cabeca-nota"><b>' + r.nota + "</b><span>nota atual</span>" + chipStatus(r) + "</div></header>") +
       '<nav class="abas">' + abas + "</nav>" +
       '<section id="corpo-aula">' + corpo + "</section>"
     );
@@ -1289,7 +1342,7 @@
       '<div class="linha-progresso"><span><b>' + r.feitas + "</b> de " + r.totalTarefas + " partes práticas executadas</span>" + barra(r.checklist) + "</div>" +
       '<p class="muted">Estas são as partes práticas citadas na aula. Marque “Executei” só depois de fazer de verdade. Com tudo marcado e a semana de flashcards cumprida, a prova prática libera.</p>' +
       '<ul class="tarefas">' + itens + "</ul>" +
-      (todas ? '<a class="btn btn-primario btn-largo" href="' + rota("aula/" + n) + '/prova-pratica">Fazer a prova prática</a>' : "") +
+      (todas && !ehLivre(CURSO) ? '<a class="btn btn-primario btn-largo" href="' + rota("aula/" + n) + '/prova-pratica">Fazer a prova prática</a>' : "") +
       "</div>";
   }
 
@@ -1519,7 +1572,8 @@
     const lib = liberacaoProva(n, S.dados, r);
     const liberadaAdmin = S.provaAdmin === n && S.perfil && S.perfil.is_admin;
     const s = S.simu;
-    if (!lib.ok && !liberadaAdmin && !s) {
+    // Curso livre: o simulado é o treino da aula e fica aberto desde o começo
+    if (!lib.ok && !liberadaAdmin && !s && !ehLivre(CURSO)) {
       const itens = lib.itens.map(function (i) {
         return '<li class="' + (i.feito ? "feito" : "") + '"><span class="req-icone">' + (i.feito ? "✓" : "○") + "</span>" +
           "<div><b>" + esc(i.texto) + '</b><span class="muted pequeno">' + esc(i.progresso) + "</span></div></li>";
@@ -1544,12 +1598,13 @@
       const ok = s.resultado.nota >= CURSO.notaMinima;
       return '<div class="painel"><div class="resultado ' + (ok ? "ok" : "baixo") + '"><b>' + Math.round(s.resultado.nota) + "</b><span>" +
         s.resultado.acertos + " de " + s.resultado.total + " acertos no simulado</span><p>" +
-        (ok ? "Bom treino! Leia as explicações das que errou e, quando se sentir seguro, faça a prova."
+        (ok ? (ehLivre(CURSO) ? "Bom treino! Leia as explicações das que errou e continue revisando os flashcards." : "Bom treino! Leia as explicações das que errou e, quando se sentir seguro, faça a prova.")
           : "Ainda abaixo de " + CURSO.notaMinima + ". Leia as explicações, revise os flashcards e faça outro simulado.") + "</p></div>" +
         blocoBonusSimulado(n) + blocoPreparo(n) +
         '<ol class="correcao">' + lista + "</ol>" +
         '<div class="linha-botoes"><button class="btn btn-primario" id="sm-iniciar">Fazer outro simulado</button>' +
-        '<a class="btn btn-secundario" href="' + rota("aula/" + n) + '/teorica">Ir para a prova teórica</a></div></div>';
+        (ehLivre(CURSO) ? '<a class="btn btn-secundario" href="' + rota("aula/" + n) + '/revisao">Revisar flashcards</a>'
+          : '<a class="btn btn-secundario" href="' + rota("aula/" + n) + '/teorica">Ir para a prova teórica</a>') + "</div></div>";
     }
     if (s) {
       const respondidas = Object.keys(s.respostas).length;
@@ -1567,12 +1622,15 @@
     const feitos = simuladosDa(n);
     const qtd = Math.min(SIMU_QUESTOES, aula.simulado.length);
     return '<div class="painel centro"><h2>Simulado</h2>' +
-      "<p>Treino para a prova teórica: <b>" + qtd + " questões</b> no mesmo nível da prova, mas <b>diferentes</b> dela. A cada tentativa as questões e a ordem mudam.</p>" +
-      '<p class="aviso">Faça quantas vezes quiser. <b>A nota do simulado não entra na nota da aula nem no ranking</b>: é para você chegar seguro na prova.</p>' +
+      (ehLivre(CURSO)
+        ? "<p>Treino da aula: <b>" + qtd + " questões</b> de múltipla escolha sobre o conteúdo. A cada tentativa as questões e a ordem mudam.</p>" +
+          '<p class="aviso">Faça quantas vezes quiser. É o jeito de testar se o conteúdo ficou. Este é um curso livre, fora do campeonato.</p>'
+        : "<p>Treino para a prova teórica: <b>" + qtd + " questões</b> no mesmo nível da prova, mas <b>diferentes</b> dela. A cada tentativa as questões e a ordem mudam.</p>" +
+          '<p class="aviso">Faça quantas vezes quiser. <b>A nota do simulado não entra na nota da aula nem no ranking</b>: é para você chegar seguro na prova.</p>') +
       blocoPreparo(n) + blocoBonusSimulado(n) +
       (feitos.length ? '<p class="muted pequeno">Você já fez ' + feitos.length + (feitos.length === 1 ? " simulado" : " simulados") + " desta aula. Último em " + dataBR(feitos[0].created_at) + ".</p>" : "") +
       '<div class="linha-botoes"><button class="btn btn-primario" id="sm-iniciar">Começar simulado</button>' +
-      '<a class="btn btn-secundario" href="' + rota("aula/" + n) + '/teorica">Ver a prova teórica</a></div></div>';
+      (ehLivre(CURSO) ? "" : '<a class="btn btn-secundario" href="' + rota("aula/" + n) + '/teorica">Ver a prova teórica</a>') + "</div></div>";
   }
 
   function iniciarSimulado(n) {
@@ -2581,7 +2639,7 @@
 
     // Aula começada, não aprovada e sem nenhum movimento há dias
     let pior = null;
-    CURSOS.forEach(function (c) {
+    CURSOS.filter(function (c) { return !ehLivre(c); }).forEach(function (c) {
       const dados = dadosDoCurso(c);
       aulasDisponiveis(c).forEach(function (a) {
         const t = ultimaAtividade(function (x) { return x.curso === c.id && x.aula === a.numero; });
@@ -2598,7 +2656,8 @@
   function proximoPasso(trava) {
     let alvo = trava && trava.curso ? { curso: trava.curso, aula: trava.aula } : null;
     if (!alvo) {
-      const ordem = [cursoDoMenu()].concat(CURSOS.filter(function (c) { return c !== cursoDoMenu(); }));
+      const ordem = [cursoDoMenu()].concat(CURSOS.filter(function (c) { return c !== cursoDoMenu(); }))
+        .filter(function (c) { return !ehLivre(c); });
       ordem.some(function (c) {
         const dados = dadosDoCurso(c);
         const a = aulasDisponiveis(c).find(function (x) { return !comCurso(c, function () { return resumoAula(x.numero, dados).aprovado; }); });
@@ -3432,9 +3491,14 @@
     }
     else if (acao === "livre") {
       const campo = document.getElementById("pomo-rotulo");
-      const rotulo = b.dataset.tipo === "outro" && campo ? campo.value : null;
+      const rotulo = b.dataset.rotulo || (b.dataset.tipo === "outro" && campo ? campo.value : null);
+      const noPortao = !!document.querySelector(".portao");
       b.disabled = true;
-      pomoComecar("foco", b.dataset.tipo, pomoLivreMin, rotulo).then(function () { b.disabled = false; });
+      pomoComecar("foco", b.dataset.tipo, pomoLivreMin, rotulo).then(function (ok) {
+        b.disabled = false;
+        // Começou pela tela de bloqueio de um curso livre: entra na aula na hora
+        if (ok && noPortao) { pomoAberto = false; rotear(); }
+      });
       return;
     }
     else if (acao === "foco" || acao === "foco-exec" || acao === "pausa") {
@@ -3465,8 +3529,9 @@
     if (!REGRAS.aulaSoComPomodoro) return true;
     if (REGRAS.adminsSemPortao && S.perfil && S.perfil.is_admin) return true;
     const e = pomoEstado();
-    // Só o pomodoro do campeonato abre as aulas (o de foco livre não)
-    if (!e || e.fase !== "foco" || !ehCampeonato(e.tipo)) return false;
+    // Mentorias: só o pomodoro do campeonato abre as aulas (o de foco livre não).
+    // Curso livre: qualquer pomodoro de foco abre (o normal é o de foco livre, que não conta no campeonato).
+    if (!e || e.fase !== "foco" || (!ehLivre(CURSO) && !ehCampeonato(e.tipo))) return false;
     // Pausa longa (mais de 10 minutos) fecha a aula até retomar o pomodoro
     return e.pausadoRestante == null || !e.pausadoEm || Date.now() - e.pausadoEm < PAUSA_MAXIMA;
   }
@@ -3475,6 +3540,23 @@
   function telaPortao(n) {
     const aula = CURSO.aulas.find(function (a) { return a.numero === n; });
     const e = pomoEstado();
+    if (ehLivre(CURSO)) {
+      // Curso livre: o pomodoro é de foco livre (aparece no relatório, não conta no campeonato)
+      layout(
+        '<a href="' + rota("") + '" class="voltar">← Voltar para as aulas</a>' +
+        '<section class="painel portao"><div class="portao-icone">🎯</div>' +
+        '<p class="hero-kicker">aula ' + dois(n) + (aula ? " · " + esc(aula.titulo) : "") + "</p>" +
+        "<h1>Comece um foco para entrar na aula</h1>" +
+        '<p class="muted">Este é um curso livre: o pomodoro dele é de <b>foco livre</b>. Ele entra no seu relatório de estudo, mas não conta para o campeonato.</p>' +
+        (e && e.fase === "pausa" ? '<p class="aviso">Você está na pausa. Se já descansou, pode começar o próximo agora.</p>' : "") +
+        '<div class="pomo-duracoes" role="group" aria-label="Duração do foco">' + DURACOES_LIVRE.map(function (m) {
+          return '<button class="pomo-dur' + (m === pomoLivreMin ? " ativo" : "") + '" data-pomo="min" data-min="' + m + '">' + m + " min</button>";
+        }).join("") + "</div>" +
+        '<p><button class="btn btn-primario" data-pomo="livre" data-tipo="outro" data-rotulo="' + esc(CURSO.titulo.slice(0, 40)) + '">🎯 Começar foco neste curso</button></p>' +
+        "</section>"
+      );
+      return;
+    }
     layout(
       '<a href="' + rota("") + '" class="voltar">← Voltar para as aulas</a>' +
       '<section class="painel portao"><div class="portao-icone">🍅</div>' +
