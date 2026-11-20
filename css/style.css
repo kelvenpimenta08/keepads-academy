@@ -916,3 +916,17 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 }
 .grade-acessos td.so-abriu { color: #9aa19f; font-size: .8rem; }
 .acessos-hoje li.so-abriu { border-left: 4px solid #c9cfcd; }
+.pomo-aviso { background: var(--aviso-claro); color: #8a4b05; border-radius: 10px; padding: .55rem .8rem; font-size: .86rem; margin: .5rem 0; text-align: left; }
+
+/* Prazo das provas */
+.chip-erro { background: var(--erro-claro); color: var(--erro); }
+.prazo-aviso { background: var(--fundo); border: 1px solid var(--borda); border-radius: 10px; padding: .5rem .75rem; font-size: .85rem; margin: .5rem 0; text-align: left; }
+.prazo-aviso.urgente { background: var(--aviso-claro); border-color: transparent; color: #8a4b05; }
+.prazo-aviso.vencido { background: var(--erro-claro); border-color: transparent; color: #9b1c1c; }
+.prazo-aviso.ok { background: var(--verde-claro); border-color: transparent; color: var(--verde-escuro); }
+.provas-prazo ul { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.provas-prazo li { display: flex; justify-content: space-between; gap: .6rem; flex-wrap: wrap; border: 1px solid var(--borda); border-left: 4px solid var(--verde); border-radius: 10px; padding: .55rem .8rem; font-size: .9rem; }
+.provas-prazo li.urgente { border-left-color: var(--aviso); }
+.provas-prazo li.vencido { border-left-color: var(--erro); }
+.provas-prazo li a { color: inherit; }
+.provas-prazo li span { color: var(--muted); }
