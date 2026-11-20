@@ -60,13 +60,15 @@
     return a;
   }
 
-  function toast(msg, tipo) {
+  // ms: quanto tempo o aviso fica na tela (avisos importantes ficam mais tempo)
+  function toast(msg, tipo, ms) {
     const el = document.createElement("div");
     el.className = "toast " + (tipo || "ok");
     el.textContent = msg;
     document.body.appendChild(el);
-    setTimeout(function () { el.classList.add("sai"); }, 2600);
-    setTimeout(function () { el.remove(); }, 3100);
+    const dura = ms || 2600;
+    setTimeout(function () { el.classList.add("sai"); }, dura);
+    setTimeout(function () { el.remove(); }, dura + 500);
   }
 
   function traduzErro(e) {
@@ -129,6 +131,66 @@
     ];
     const libera = primeira ? new Date(primeira.getTime() + regra.diasDesdeInicio * 86400000) : null;
     return { ok: itens.every(function (i) { return i.feito; }), itens: itens, liberaEm: libera };
+  }
+
+  // ----- prazo das provas (campeonato) -----
+  // Depois que as provas liberam, a pessoa tem PONTOS.prazoProva.teorica (ou .pratica) dias para fazer
+  // valendo XP cheio na temporada. Depois disso a prova ainda vale para a nota, mas o XP cai pela metade.
+  // A conta é a mesma do banco (supabase/temporada.sql): libera no dia em que completa 7 dias desde a
+  // primeira revisão da aula e 4 dias diferentes de revisão; o prazo nunca começa antes de prazoProva.inicio.
+  // Só vale na mentoria da temporada em andamento. Devolve null quando não há prazo.
+  function prazoProva(n, tipo, dados, curso) {
+    const P = (window.TEMPORADA_PONTOS || {}).prazoProva;
+    const t = temporadaAtual();
+    curso = curso || CURSO;
+    if (!P || !P[tipo] || !t || !curso || t.curso !== curso.id || situacaoTemporada(t).fase !== "andamento") return null;
+    const dias = {};
+    dados.log.forEach(function (l) { if (l.aula === n) dias[diaLocal(l.reviewed_at)] = true; });
+    const lista = Object.keys(dias).sort();
+    if (lista.length < 4) return null;
+    let lib = diaMenos(lista[0], -7);
+    if (lista[3] > lib) lib = lista[3];
+    const hoje = diaLocal(new Date());
+    if (lib > hoje) return null;   // ainda não liberou
+    const base = P.inicio && P.inicio > lib ? P.inicio : lib;
+    const prazo = diaMenos(base, -P[tipo]);
+    const inicioTemp = Math.max(dataLocal(t.inicio).getTime(), REGRAS.inicioContagem ? Date.parse(REGRAS.inicioContagem) : 0);
+    const feita = dados.provas.some(function (p) { return p.aula === n && p.tipo === tipo && Date.parse(p.created_at) >= inicioTemp; });
+    const resta = Math.round((dataLocal(prazo) - dataLocal(hoje)) / DIA);
+    return { prazo: prazo, resta: resta, vencido: resta < 0, feita: feita, fator: P.fator, dias: P[tipo] };
+  }
+
+  // Tela da mentoria: provas liberadas ainda não feitas, da que vence primeiro para a última
+  function blocoProvasComPrazo(aulas) {
+    const itens = [];
+    aulas.forEach(function (x) {
+      if (!x.r) return;
+      [["teorica", "Prova teórica", "teorica"], ["pratica", "Prova prática", "prova-pratica"]].forEach(function (t) {
+        const pz = prazoProva(x.info.numero, t[0], S.dados);
+        if (pz && !pz.feita) itens.push({ pz: pz, html: '<li class="' + (pz.vencido ? "vencido" : pz.resta <= 2 ? "urgente" : "") + '">' +
+          '<a href="' + rota("aula/" + x.info.numero + "/" + t[2]) + '"><b>Aula ' + dois(x.info.numero) + " · " + t[1] + "</b></a>" +
+          "<span>" + (pz.vencido ? "prazo venceu em " + nomeDia(pz.prazo) + " · vale metade do XP"
+            : pz.resta === 0 ? "vence hoje" : "até " + nomeDia(pz.prazo) + " · faltam " + pz.resta + (pz.resta === 1 ? " dia" : " dias")) + "</span></li>" });
+      });
+    });
+    if (!itens.length) return "";
+    itens.sort(function (a, b) { return a.pz.resta - b.pz.resta; });
+    return '<section class="painel provas-prazo"><h2>⏳ Provas para fazer</h2>' +
+      '<p class="muted pequeno">Feitas dentro do prazo valem XP cheio no campeonato. Depois do prazo ainda valem para a nota e o certificado, mas o XP cai pela metade.</p>' +
+      "<ul>" + itens.map(function (i) { return i.html; }).join("") + "</ul></section>";
+  }
+
+  // Texto do prazo para uma prova ainda não feita ("" quando não há prazo ou já fez)
+  function avisoPrazo(pz, nomeProva, curto) {
+    if (!pz || pz.feita) return "";
+    const metade = pz.fator === 0.5 ? "metade do XP" : Math.round(pz.fator * 100) + "% do XP";
+    if (pz.vencido) {
+      return '<p class="prazo-aviso vencido">⚠️ ' + nomeProva + ": o prazo venceu em " + nomeDia(pz.prazo) + "." +
+        (curto ? " Agora vale " + metade + "." : " Ela ainda vale para a nota e o certificado, mas no campeonato passa a valer " + metade + ".") + "</p>";
+    }
+    const quando = pz.resta === 0 ? "<b>vence hoje</b>" : "faltam <b>" + pz.resta + (pz.resta === 1 ? " dia" : " dias") + "</b>";
+    return '<p class="prazo-aviso' + (pz.resta <= 2 ? " urgente" : "") + '">⏳ ' + nomeProva + ": faça até " + nomeDia(pz.prazo) + " (" + quando + ")" +
+      (curto ? "." : " para valer XP cheio no campeonato. Depois do prazo vale " + metade + ".") + "</p>";
   }
 
   async function carregarPerfil() {
@@ -295,7 +357,9 @@
           '<ul class="ofensiva-checklist">' +
           '<li class="' + (o.pomodorosHoje >= 1 ? "ok" : "") + '">' + (o.pomodorosHoje >= 1 ? "✅" : "🍅") + " 1 pomodoro de " + REGRAS.pomodoroMinutos + " min <small>(" + o.pomodorosHoje + "/1)</small>" +
           (o.pomodorosHoje >= 1 ? "" : ' <button class="link link-inline" data-pomodoro-abrir>começar agora</button>') + "</li>" +
-          '<li class="' + (o.hoje >= o.meta ? "ok" : "") + '">' + (o.hoje >= o.meta ? "✅" : "🧠") + " " + o.meta + " flashcards revisados <small>(" + Math.min(o.hoje, o.meta) + "/" + o.meta + ")</small></li></ul>") +
+          '<li class="' + (o.hoje >= o.meta ? "ok" : "") + '">' + (o.hoje >= o.meta ? "✅" : "🧠") + " " + o.meta + " flashcards revisados <small>(" + Math.min(o.hoje, o.meta) + "/" + o.meta + ")</small></li></ul>" +
+          (o.pomodorosHoje < 1 && cruzaMeiaNoite(REGRAS.pomodoroMinutos)
+            ? '<p class="pomo-aviso">⏰ Um pomodoro começado agora termina depois da meia-noite e conta para amanhã.</p>' : "")) +
       "</div></section>";
   }
 
@@ -693,8 +757,12 @@
         "</ul>" +
         (function () {
           const lib = liberacaoProva(a.numero, S.dados, r);
-          if (lib.ok) return '<p class="aula-aviso ok">Provas liberadas</p>';
-          return '<p class="aula-aviso">Provas liberam ' + (lib.liberaEm ? "a partir de " + dataBR(lib.liberaEm) : "depois de uma semana de flashcards") + "</p>";
+          if (lib.ok) return '<p class="aula-aviso ok">Provas liberadas</p>' +
+            avisoPrazo(prazoProva(a.numero, "teorica", S.dados), "Prova teórica", true) +
+            avisoPrazo(prazoProva(a.numero, "pratica", S.dados), "Prova prática", true);
+          // O prazo corre pelo tempo de estudo; se falta só ver todos os cards, o aviso já aparece
+          return '<p class="aula-aviso">Provas liberam ' + (lib.liberaEm ? "a partir de " + dataBR(lib.liberaEm) : "depois de uma semana de flashcards") + "</p>" +
+            avisoPrazo(prazoProva(a.numero, "teorica", S.dados), "Prova teórica", true);
         })() +
         '<div class="aula-acoes">' +
         (revisar ? '<a class="btn btn-primario" href="' + rota("aula/" + a.numero) + '/revisao">' + tranca + "Revisar agora (" + revisar + ")</a>" : '<span class="ok-hoje">Revisão em dia</span>') +
@@ -715,6 +783,7 @@
       '<div class="hero-stats"><div><b>' + aprovadas + "/" + CURSO.aulas.length + "</b><span>aulas aprovadas</span></div>" +
       "<div><b>🔥 " + calcularOfensiva().dias + "</b><span>dias de ofensiva</span></div>" +
       "<div><b>" + CURSO.notaMinima + "</b><span>nota mínima</span></div></div></section>" +
+      blocoProvasComPrazo(aulas) +
       (CURSO.linkAulas
         ? '<section class="painel acesso-aulas"><div class="acesso-texto"><h2>🎬 Plataforma para assistir a mentoria</h2>' +
           '<p class="muted">As aulas gravadas ficam aqui.</p></div>' +
@@ -1281,6 +1350,7 @@
         "<p>As provas são difíceis de propósito. Elas liberam depois de uma semana estudando os flashcards desta aula.</p>" +
         '<ul class="requisitos">' + itens + "</ul>" +
         (lib.liberaEm ? '<p class="muted">Se você revisar com frequência, a prova libera a partir de <b>' + dataBR(lib.liberaEm) + "</b>.</p>" : "") +
+        avisoPrazo(prazoProva(n, tipo, S.dados), nomeProva) +
         '<div class="linha-botoes"><a class="btn btn-primario" href="' + rota("aula/" + n) + '/revisao">Ir para os flashcards</a>' +
         '<a class="btn btn-secundario" href="#/como-funciona">Como funciona</a></div>' +
         (S.perfil && S.perfil.is_admin ? '<button class="link" id="pv-admin">Liberar só para mim agora (teste de administrador)</button>' : "") +
@@ -1289,6 +1359,7 @@
     if (tipo === "pratica" && r.feitas < r.totalTarefas) {
       return '<div class="painel centro"><h2>Prova prática bloqueada</h2>' +
         "<p>Execute e marque todas as partes práticas primeiro (" + r.feitas + " de " + r.totalTarefas + " feitas).</p>" +
+        avisoPrazo(prazoProva(n, "pratica", S.dados), "Prova prática") +
         '<a class="btn btn-primario" href="' + rota("aula/" + n) + '/pratica">Ir para as partes práticas</a></div>';
     }
     const p = S.prova;
@@ -1307,6 +1378,13 @@
       return '<div class="painel"' + (festa ? " data-festa" : "") + '><div class="resultado ' + (ok ? "ok" : "baixo") + '"><b>' + Math.round(p.resultado.nota) + "</b><span>" +
         p.resultado.acertos + " de " + p.resultado.total + " acertos</span><p>" +
         (ok ? "Mandou bem! Revise as que errou abaixo." : "Ainda abaixo de " + CURSO.notaMinima + ". Revise as explicações e os flashcards e tente de novo.") + "</p></div>" +
+        (function () {
+          const pz = prazoProva(n, tipo, S.dados);
+          if (!pz) return "";
+          return pz.vencido
+            ? '<p class="prazo-aviso vencido">Feita depois do prazo (' + nomeDia(pz.prazo) + "): no campeonato ela vale metade do XP.</p>"
+            : '<p class="prazo-aviso ok">✅ Feita dentro do prazo: vale XP cheio no campeonato.</p>';
+        })() +
         '<ol class="correcao">' + lista + "</ol>" +
         '<p class="muted centro">Próxima tentativa desta prova a partir de <b>' + dataBR(new Date(Date.now() + REGRAS.refazerProvaDias * DIA)) + "</b>.</p>" +
         '<div class="linha-botoes"><a class="btn btn-primario" href="' + rota("ranking") + '">Ver ranking</a><a class="btn btn-secundario" href="' + rota("aula/" + n) + '/nota">Ver nota da aula</a></div></div>';
@@ -1329,6 +1407,7 @@
     return '<div class="painel centro"><h2>' + nomeProva + "</h2>" +
       "<p>" + total + " questões difíceis de múltipla escolha" + (tipo === "pratica" ? " sobre a execução das partes práticas" : " sobre os conceitos da aula") + ".</p>" +
       '<p class="aviso"><b>Você tem uma tentativa.</b> Depois de enviar, só dá para refazer ' + REGRAS.refazerProvaDias + " dias depois. A nota entra no ranking da mentoria.</p>" +
+      avisoPrazo(prazoProva(n, tipo, S.dados), nomeProva) +
       (tentativas.length
         ? '<p class="muted">Melhor nota até agora: <b>' + Math.round(melhor) + "</b> · Tentativas: " + tentativas.length + "</p>"
         : "") +
@@ -1805,7 +1884,9 @@
       "<tr><td>Ofensiva de " + Object.keys(of).join(", ") + " dias</td><td>+" + Object.keys(of).map(function (k) { return of[k]; }).join(", +") + "</td><td>Dias seguidos batendo a meta, dentro da temporada</td></tr>" +
       "<tr><td>Card dominado</td><td>" + P.dominado + "</td><td>Card que você lembra há 7 dias ou mais</td></tr>" +
       "<tr><td>Parte prática executada</td><td>" + P.pratica + "</td><td>Com o relato do que fez. O organizador pode conferir.</td></tr>" +
-      "<tr><td>Prova</td><td>nota × " + P.prova + "</td><td>Melhor nota de cada prova feita na temporada (até " + (100 * P.prova) + ")</td></tr>" +
+      "<tr><td>Prova</td><td>nota × " + P.prova + "</td><td>Melhor nota de cada prova feita na temporada (até " + (100 * P.prova) + ")" +
+      (P.prazoProva ? ". Prazo: " + P.prazoProva.teorica + " dias para a teórica e " + P.prazoProva.pratica + " para a prática, contados de quando liberam. Depois do prazo vale " +
+        (P.prazoProva.fator === 0.5 ? "metade" : Math.round(P.prazoProva.fator * 100) + "%") + " do XP" : "") + "</td></tr>" +
       "<tr><td>Aula aprovada</td><td>+" + P.aula + "</td><td>Nota " + curso.notaMinima + " ou mais na aula</td></tr>" +
       (P.simulado ? "<tr><td>Simulados de uma aula</td><td>+" + P.simulado.xp + "</td><td>Uma vez por aula, ao fazer o simulado em " + P.simulado.dias + " dias diferentes. A nota do simulado não conta.</td></tr>" : "") +
       "</tbody></table>";
@@ -2262,6 +2343,39 @@
     );
   }
 
+  // Equipe (administrador): provas liberadas e ainda não feitas, com o prazo de cada uma
+  function painelPrazos(pessoas, log, provas) {
+    const linhas = [];
+    pessoas.forEach(function (p) {
+      const dados = {
+        log: log.filter(function (l) { return l.user_id === p.id && l.curso === CURSO.id; }),
+        provas: provas.filter(function (x) { return x.user_id === p.id; }).filter(provaValida)
+      };
+      CURSO.aulas.forEach(function (a) {
+        if (!a.disponivel || !AULAS[a.numero]) return;
+        [["teorica", "Teórica"], ["pratica", "Prática"]].forEach(function (t) {
+          const pz = prazoProva(a.numero, t[0], dados);
+          if (pz && !pz.feita) linhas.push({ nome: p.nome || "Sem nome", aula: a.numero, tipo: t[1], pz: pz });
+        });
+      });
+    });
+    const t = temporadaAtual();
+    if (!t || t.curso !== CURSO.id || !(window.TEMPORADA_PONTOS || {}).prazoProva) return "";
+    linhas.sort(function (a, b) { return a.pz.resta - b.pz.resta || a.nome.localeCompare(b.nome); });
+    const atrasadas = linhas.filter(function (l) { return l.pz.vencido; }).length;
+    return '<section class="painel"><h2>⏳ Provas pendentes</h2>' +
+      '<p class="muted">Provas já liberadas que a pessoa ainda não fez. Dentro do prazo valem XP cheio; depois, metade. ' +
+      (linhas.length ? "<b>" + linhas.length + "</b> pendente(s)" + (atrasadas ? ", <b>" + atrasadas + "</b> com prazo vencido" : "") + "." : "Ninguém com prova pendente.") + "</p>" +
+      (linhas.length ? '<div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Pessoa</th><th>Aula</th><th>Prova</th><th>Prazo</th><th>Situação</th></tr></thead><tbody>' +
+        linhas.map(function (l) {
+          return "<tr><td><b>" + esc(l.nome) + "</b></td><td>" + dois(l.aula) + "</td><td>" + l.tipo + "</td><td>" + nomeDia(l.pz.prazo) + "</td><td>" +
+            (l.pz.vencido ? '<span class="chip chip-erro">vencida há ' + (-l.pz.resta) + (l.pz.resta === -1 ? " dia" : " dias") + "</span>"
+              : l.pz.resta <= 2 ? '<span class="chip chip-aviso">' + (l.pz.resta === 0 ? "vence hoje" : "faltam " + l.pz.resta + (l.pz.resta === 1 ? " dia" : " dias")) + "</span>"
+              : '<span class="chip chip-cinza">faltam ' + l.pz.resta + " dias</span>") + "</td></tr>";
+        }).join("") + "</tbody></table></div>" : "") +
+      '<p class="muted pequeno">A prova prática só abre depois que a pessoa marca todas as partes práticas, por isso o prazo dela é maior.</p></section>';
+  }
+
   async function telaEquipe() {
     if (!S.perfil || !S.perfil.is_admin) { location.hash = "#/"; return; }
     layout('<div class="painel centro"><p>Carregando a equipe…</p></div>');
@@ -2329,6 +2443,7 @@
       '<p class="muted pequeno">Cards vistos = já revisados pelo menos uma vez. Dominados = com memória de 7 dias ou mais (só aparecem depois de uma semana de revisões). ' +
       "Ofensiva, pomodoros e última atividade contam todas as mentorias. Foco livre = pomodoros de leitura, videoaula, trabalho e outros, que não contam para o campeonato. " +
       "O placar da Temporada só soma XP a partir do primeiro dia dela.</p>" +
+      painelPrazos(res[0].data, res[5].data, res[3].data) +
       painelTravas(res[4].data, res[0].data)
     );
   }
@@ -2987,7 +3102,32 @@
       inicio: Date.now(), fimEm: Date.now() + min * 60000, pausadoRestante: null, foraMs: 0, saidas: 0, saiuEm: null });
     pomoConfirmar = false;
     pomoAtualizar();
+    // O pomodoro conta no dia em que termina: avisa quando ele vai virar a meia-noite
+    if (fase === "foco" && ehCampeonato(tipo) && cruzaMeiaNoite(min)) {
+      toast("⏰ Este pomodoro termina depois da meia-noite, então vai contar para amanhã, não para hoje.", "erro", 9000);
+    }
     return true;
+  }
+
+  // Um pomodoro de "min" minutos começado agora termina em outro dia (horário de Brasília)?
+  function cruzaMeiaNoite(min) {
+    return diaLocal(new Date()) !== diaLocal(new Date(Date.now() + min * 60000));
+  }
+
+  // Avisos da meta do dia dentro do painel do pomodoro: o que falta e o risco da meia-noite
+  function avisosMetaPomodoro() {
+    if (!S.bruto) return "";
+    const o = calcularOfensiva();
+    let html = "";
+    if (o.pomodorosHoje >= 1 && o.hoje < o.meta) {
+      html += '<p class="pomo-aviso">🧠 Faltam <b>' + (o.meta - o.hoje) + " flashcards</b> para a ofensiva de hoje. " +
+        "O pomodoro já está garantido: revise " + (o.meta - o.hoje === 1 ? "mais 1 card" : "os cards") + " antes da meia-noite.</p>";
+    }
+    if (!o.batidaHoje && o.pomodorosHoje < 1 && cruzaMeiaNoite(REGRAS.pomodoroMinutos)) {
+      html += '<p class="pomo-aviso">⏰ Um pomodoro começado agora termina depois da meia-noite e vai contar para <b>amanhã</b>. ' +
+        "Para a ofensiva de hoje, ele precisaria terminar até 23:59.</p>";
+    }
+    return html;
   }
 
   async function pomoSalvar(item) {
@@ -3124,7 +3264,8 @@
         toast(tipoPomo(e.tipo).icone + " Foco livre concluído: " + e.minutos + " min de " + nomePomo(e) + ". Registrado no seu relatório.", "ok");
       } else toast(disperso
         ? "Pomodoro disperso: " + tempoTxt(foraSeg) + " fora da plataforma. Ele não conta para a ofensiva" + (o.pomodorosHoje ? " (mas você já tem um válido hoje)." : ": faça outro com foco.")
-        : "Pomodoro concluído! " + (o.batidaHoje ? "Ofensiva do dia garantida 🔥" : o.hoje >= o.meta ? "" : "Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva."), disperso ? "erro" : "ok");
+        : "Pomodoro concluído! " + (o.batidaHoje ? "Ofensiva do dia garantida 🔥" : o.hoje >= o.meta ? "" : "Agora revise " + Math.max(0, o.meta - o.hoje) + " flashcards para acender a ofensiva de hoje 🔥"),
+        disperso ? "erro" : "ok", disperso || !o.batidaHoje ? 8000 : 0);
       if (!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) confete();
     } catch (err) {
       if (/incompleto|antigo|não encontrado/i.test(err.message || "")) {
@@ -3177,7 +3318,7 @@
     const contagem = '<p class="pomo-hoje">Hoje: <b>' + hoje + "</b> do campeonato" +
       (disp ? " (" + disp + " disperso" + (disp === 1 ? "" : "s") + ", não conta" + (disp === 1 ? "" : "m") + ")" : "") +
       (validos ? " ✅" : " · a ofensiva pede 1 sem dispersão") +
-      (livresHoje ? " · <b>" + livresHoje + "</b> de foco livre" : "") + "</p>";
+      (livresHoje ? " · <b>" + livresHoje + "</b> de foco livre" : "") + "</p>" + avisosMetaPomodoro();
     const secoes = function (secundario) {
       return '<p class="pomo-secao">🏆 Campeonato <small>abre as aulas e conta para a ofensiva</small></p>' + botoesPomodoro(secundario) +
         '<p class="pomo-secao">🎯 Foco livre <small>para ler, ver curso ou trabalhar · não conta no campeonato</small></p>' + botoesFocoLivre();
