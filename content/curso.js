@@ -75,17 +75,18 @@
     // Cursos livres: conteúdo público (ex.: aulas do YouTube) que a equipe quer estudar com a
     // metodologia do Academy. Aparecem para todos, mas ficam FORA do campeonato: não têm prova
     // oficial nem certificado, e flashcards e pomodoros deles não contam para placar, ofensiva ou ranking.
-    // O id começa com "livre-" (o banco usa isso) e os ids dos cards levam o prefixo do curso (ex.: "ca-a1-c01").
+    // O id começa com "livre-" (o banco usa isso) e os ids dos cards levam o prefixo do curso (ex.: "cp-a1-c01").
+    // Material das aulas: Google Drive, pasta "Keep Academy – Comunidade 8Ps" (uma subpasta por aula).
     Object.assign({}, padrao, {
-      id: "livre-conrado-adolfo",
+      id: "livre-comunidade-8ps",
       livre: true,
       tipo: "Curso livre",
-      titulo: "Aulas do Conrado Adolfo",
+      titulo: "Comunidade 8Ps",
       mentor: "Conrado Adolfo",
-      descricao: "Aulas públicas do Conrado Adolfo no YouTube, estudadas com a metodologia do Academy: resumo, flashcards, práticas e simulado.",
+      descricao: "Aulas da Comunidade 8Ps, do Conrado Adolfo, estudadas com a metodologia do Academy: resumo, flashcards, práticas e simulado.",
       imagem: "",
       versaoProvas: 1,
-      prefixoArquivos: "ca-",   // arquivos: content/ca-aula-NN.js, content/resumos/ca-aula-NN.js, content/simulados/ca-aula-NN.js
+      prefixoArquivos: "cp-",   // arquivos: content/cp-aula-NN.js, content/resumos/cp-aula-NN.js, content/simulados/cp-aula-NN.js
       aulas: []                 // as aulas entram aqui conforme o material chegar
     })
   ];
