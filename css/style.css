@@ -930,3 +930,6 @@ input:disabled { background: #f1f4f3; color: var(--muted); }
 .provas-prazo li.vencido { border-left-color: var(--erro); }
 .provas-prazo li a { color: inherit; }
 .provas-prazo li span { color: var(--muted); }
+
+/* Cursos livres */
+.titulo-secao { font-family: var(--fonte-titulo); font-size: 1.35rem; margin: 2rem 0 .3rem; }
